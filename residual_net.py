@@ -41,7 +41,7 @@ parser.add_option('--lr', action='store', type=float, dest='lr', default=2e-4)
 parser.add_option('--bs', action = 'store', type=float, dest='bs', default = 6)
 parser.add_option('--epochs', action = 'store', type=float, dest='epochs', default = 60)
 parser.add_option('--method', action='store', type=str, dest='method', default = 'residualIter')
-parser.add_option('--architecture', action='store', type=str, dest='arch', default = 'cascaded')
+parser.add_option('--architecture', action='store', type=str, dest='arch', default = 'unet')
 
 
 # parser.add_option('--method', action='store',type=str,dest='meth', default='nett_unc')
@@ -120,8 +120,8 @@ test_dataset = DataGenerator(
 
 torch.cuda.empty_cache()
 gc.collect()
-batch_size = options.bs
-epochs = options.epochs
+batch_size = int(options.bs)
+epochs = int(options.epochs)
 
 train_loader = DataLoader(
     train_dataset, batch_size=batch_size, shuffle=True,

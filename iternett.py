@@ -65,7 +65,7 @@ index = '%s_%s'%(options.task, options.meth)
 
 #%%
 
-regularizer = regUnet(n_channels =2,f_size=32,out_channels=2)
+regularizer = regUnet(n_channels =2,f_size=32,out_channels=2,out_acti = 'tanh')
 regularizer.apply(init_weights)
 regularizer.to(device)
 print(summary(regularizer,[8,2,320,320]))
@@ -259,7 +259,7 @@ for i in indices:
     
 #%%
 
-K=np.linspace(0,len(indices)-1,10).astype(np.uint16)
+K=np.linspace(0,len(indices)-1,20).astype(np.uint16)
 LAM = np.linspace(.1,2,10)
 stepsize = np.linspace(0.1,1,5)
 TABLE = pd.DataFrame(columns=['lam','stepsize','psnr','ssim'])
@@ -279,7 +279,7 @@ for ss in stepsize:
         psnr_list = []; ssim_list = []
         for k in K:
             u = U[k]; y = Y[k]; x0 = inv_fourier(y); gt = X[k]; metric =[]
-            maxiter = 100
+            maxiter = 300
             s = np.repeat(ss, maxiter); 
             img_fidelity=[]; img_reg=[]
             x = x0
@@ -297,7 +297,7 @@ for ss in stepsize:
                 
                                               
                 # plt.imshow(regularizer(tmp).cpu().detach().numpy()[0,0]); plt.colorbar()
-                pred,unc =regularizer(tmp)
+                pred =regularizer(tmp)
                 reg_out = torch.sum(torch.square(pred))
                 grad = torch.autograd.grad(
                     inputs = tmp, outputs = reg_out, 
@@ -312,17 +312,16 @@ for ss in stepsize:
                 
                 metric.append([psnr(gt.real,np.clip(x.real,0,1)),
                                100*ssim(gt.real,np.clip(x.real,0,1),data_range=1),
-                               torch.mean(unc).item()])
+                               ])
                 
                
             I = np.linspace(0,maxiter-1,5).astype(np.uint16)
             metric=np.array(metric)
             psnr_list.append(metric[-1,0]); ssim_list.append(metric[-1,1])
                
-            fig, ax = plt.subplots(2,2,figsize=(9,5))
-            pl = ax[0,0].plot(metric[:,0])
-            pl = ax[0,1].plot(metric[:,1],color='orange')
-            pl = ax[1,0].plot(metric[:,2],color='black')
+            fig, ax = plt.subplots(1,2,figsize=(13,5))
+            pl = ax[0].plot(metric[:,0])
+            pl = ax[1].plot(metric[:,1],color='orange')
             plt.suptitle('lam: %.2f, psnr: %.2f, sim: %.2f'%(
                 lam,metric[-1,0],metric[-1,1])); 
             plt.show()
@@ -347,7 +346,7 @@ for ss in stepsize:
             fig.tight_layout(pad=.1)
             plt.show()
                 
-            
+        
             
             
         
@@ -356,6 +355,6 @@ for ss in stepsize:
                              columns=['lam','stepsize','psnr','ssim'])
     
         TABLE=pd.concat([TABLE,table],ignore_index=True)
-        TABLE.to_csv('results_%s.csv'%index)
+        TABLE.to_csv('table_%s.csv'%index)
         
         gc.collect()

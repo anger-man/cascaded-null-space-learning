@@ -111,8 +111,8 @@ test_dataset = DataGenerator(
 
 torch.cuda.empty_cache()
 gc.collect()
-batch_size = options.bs
-epochs = options.epochs
+batch_size = int(options.bs)
+epochs = int(options.epochs)
 nc = 1
 train_resnet=epochs
 
@@ -296,7 +296,7 @@ for epoch in range(1, resnet_iter):
         print('\nSSIM increased ({:.6f} --> {:.6f}).  Saving model ...'.format(
         ssim_max,
         sm), flush=True)
-        torch.save(net.state_dict(), 'resnet_%s.pt' %index)
+        torch.save(net.state_dict(), '%s.pt' %index)
         # torch.save(regularizer.state_dict(), 'regularizer_%s.pt' %index)
         ssim_max = sm
     
@@ -367,6 +367,7 @@ with torch.no_grad():
     for U,recon,full,full2 in bar:
         recon = recon.to(device); full= full.to(device)
         U = U.to(device)
+        del full2
         inter,net_out,unc = net(recon,U)
         
         loss_image = .5*criterion(full,net_out,unc)+.5*MAE()(full,inter)

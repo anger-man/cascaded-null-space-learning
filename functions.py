@@ -116,7 +116,6 @@ class DataGenerator(Dataset):
             task: str = 'fastmri',
             path: str = None,
             img_ids1: np.array = None,
-            img_ids2: np.array = None,
             reduce_dim: bool = True,
             disturb_input: bool = True,
             affine_matrix = False,
@@ -127,6 +126,7 @@ class DataGenerator(Dataset):
             if test:
                 self.img_folder1  = f"{path}/evaluation"
             self.img_ids1 = img_ids1
+            self.img_ids2 = np.random.permutation(img_ids1)
             self.reduce_dim = reduce_dim
             self.disturb_input = disturb_input
             self.affine_matrix = affine_matrix
@@ -152,7 +152,7 @@ class DataGenerator(Dataset):
         data=y_u
         full = channelize(x)
         
-        image_name = self.img_ids1[idx]
+        image_name = self.img_ids2[idx]
         image_path = os.path.join(self.img_folder1 , image_name)
         foo = np.load(image_path)
         x = inv_fourier(foo)
