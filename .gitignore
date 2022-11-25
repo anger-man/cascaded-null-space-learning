@@ -1,0 +1,6 @@
+*.zip
+*.npy
+tables/*
+arrays/*
+*.pt
+old_scripts/*
