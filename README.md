@@ -1,2 +1,2 @@
-# cascadedNullSpaceNetwork
+# cascaded-null-space-learning
 Accelerated MRI reconstruction using data-consistent and uncertainty-aware null space networks
