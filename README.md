@@ -32,12 +32,12 @@ Available tasks:
 - *fastmri*
 
 
-### Residual U-Net
+### Residual U-net
 Journal paper: https://ieeexplore.ieee.org/document/7949028
 
 **Training**
 ```
-python residual_net.py --bs 8 --epochs 60 --method 'residual' --task 'phantom'
+python residual_net.py --bs 8 --epochs 60 --method 'residual' --task 'phantom' --architecture 'unet'
 ```
 Available methods: 
 - *residual*
@@ -46,6 +46,10 @@ Available methods:
 Available tasks: 
 - *phantom*
 - *fastmri*
+
+Available architectures:
+- *unet* (https://link.springer.com/chapter/10.1007/978-3-319-24574-4_28)
+- *casnet* (https://www.sciencedirect.com/science/article/pii/S0895611119300990)
 
 
 ### Uncertainty-aware cascaded null space network (Ours)
