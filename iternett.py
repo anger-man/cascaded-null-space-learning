@@ -102,8 +102,8 @@ valid_dataset = DataGenerator(
 
 torch.cuda.empty_cache()
 gc.collect()
-batch_size = options.bs
-epochs = options.epochs
+batch_size = int(options.bs)
+epochs = int(options.epochs)
 
 train_loader = DataLoader(
     train_dataset, batch_size=batch_size, shuffle=True,
@@ -199,7 +199,7 @@ for epoch in range(1, epochs+1):
                 # optimize on traces
                 eps = torch.rand(recon.size(0),1, device=device)
                 mixed = recon*eps.view((-1,1,1,1)) + full*(1.-eps).view((-1,1,1,1))
-                pred3,unc3 = regularizer(mixed)
+                pred3 = regularizer(mixed)
                 loss3 = criterion(full-mixed,pred3)
                 loss = 1/3*(loss1+loss2+loss3)
            
@@ -259,7 +259,7 @@ for i in indices:
     
 #%%
 
-K=np.linspace(0,len(indices)-1,20).astype(np.uint16)
+K=np.linspace(0,len(indices)-1,400).astype(np.uint16)
 LAM = np.linspace(.1,2,10)
 stepsize = np.linspace(0.1,1,5)
 TABLE = pd.DataFrame(columns=['lam','stepsize','psnr','ssim'])
@@ -319,37 +319,32 @@ for ss in stepsize:
             metric=np.array(metric)
             psnr_list.append(metric[-1,0]); ssim_list.append(metric[-1,1])
                
-            fig, ax = plt.subplots(1,2,figsize=(13,5))
-            pl = ax[0].plot(metric[:,0])
-            pl = ax[1].plot(metric[:,1],color='orange')
-            plt.suptitle('lam: %.2f, psnr: %.2f, sim: %.2f'%(
-                lam,metric[-1,0],metric[-1,1])); 
-            plt.show()
-                
-           
-            
-            fig, ax = plt.subplots(3,5,figsize=(18,9)); 
-            for j in range(5):
-                im = ax[0,j].imshow(img_fidelity[I[j]], cmap='Greys_r', vmin=0, vmax=1)
-                ax[0,j].axis('off')
-                plt.colorbar(im,ax=ax[0,j])
-                
-                im = ax[1,j].imshow(img_reg[I[j]], cmap='Greys_r',vmin=0,vmax=1)
-                ax[1,j].axis('off') 
-                plt.colorbar(im,ax=ax[1,j])
-            im = ax[2,3].imshow(np.real(x0), cmap='Greys_r',vmin=0,vmax=1)
-            ax[2,3].axis('off')
-            plt.colorbar(im,ax=ax[2,3])
-            im = ax[2,4].imshow(gt.real, cmap='Greys_r')
-            ax[2,4].axis('off')
-            plt.colorbar(im,ax=ax[2,4])
-            fig.tight_layout(pad=.1)
-            plt.show()
-                
-        
+        fig, ax = plt.subplots(1,2,figsize=(13,5))
+        pl = ax[0].plot(metric[:,0])
+        pl = ax[1].plot(metric[:,1],color='orange')
+        plt.suptitle('lam: %.2f, psnr: %.2f, sim: %.2f'%(
+            lam,metric[-1,0],metric[-1,1])); 
+        plt.show()
             
             
-        
+        fig, ax = plt.subplots(3,5,figsize=(18,9)); 
+        for j in range(5):
+            im = ax[0,j].imshow(img_fidelity[I[j]], cmap='Greys_r', vmin=0, vmax=1)
+            ax[0,j].axis('off')
+            plt.colorbar(im,ax=ax[0,j])
+            
+            im = ax[1,j].imshow(img_reg[I[j]], cmap='Greys_r',vmin=0,vmax=1)
+            ax[1,j].axis('off') 
+            plt.colorbar(im,ax=ax[1,j])
+        im = ax[2,3].imshow(np.real(x0), cmap='Greys_r',vmin=0,vmax=1)
+        ax[2,3].axis('off')
+        plt.colorbar(im,ax=ax[2,3])
+        im = ax[2,4].imshow(gt.real, cmap='Greys_r')
+        ax[2,4].axis('off')
+        plt.colorbar(im,ax=ax[2,4])
+        fig.tight_layout(pad=.1)
+        plt.show()
+            
     
         table = pd.DataFrame(np.array([lam,ss,np.mean(psnr_list),np.mean(ssim_list)]).reshape(1,4),
                              columns=['lam','stepsize','psnr','ssim'])

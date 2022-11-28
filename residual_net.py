@@ -26,6 +26,7 @@ from torchmetrics import StructuralSimilarityIndexMeasure as torch_ssim
 import optparse
 from models import Unet, init_weights, CascadedUnet
 import pytorch_ssim
+from skimage.metrics import structural_similarity as ssim
 import pandas as pd
 
 
@@ -39,13 +40,13 @@ parser.add_option('--lambda', action="store", type= float,dest="lambda",default=
 parser.add_option('--wait', action="store", type=int, dest="wait",default=0)
 parser.add_option('--lr', action='store', type=float, dest='lr', default=2e-4)
 parser.add_option('--bs', action = 'store', type=float, dest='bs', default = 6)
-parser.add_option('--epochs', action = 'store', type=float, dest='epochs', default = 60)
+parser.add_option('--epochs', action = 'store', type=float, dest='epochs', default =0)
 parser.add_option('--method', action='store', type=str, dest='method', default = 'residualIter')
 parser.add_option('--architecture', action='store', type=str, dest='arch', default = 'unet')
 
 
 # parser.add_option('--method', action='store',type=str,dest='meth', default='nett_unc')
-parser.add_option('--task', action='store', type=str, dest='task', default='phantom')
+parser.add_option('--task', action='store', type=str, dest='task', default='fastmri')
 
 options,args = parser.parse_args()
 
@@ -70,9 +71,9 @@ index = '%s_%s_%s'%(options.task,options.arch,options.method)
 # regularizer.to(device)
 
 if options.arch == 'unet':
-    net = Unet(n_channels =2,f_size=32,out_channels=2)
+    net = Unet(n_channels =2,f_size=32,out_channels=2, out_acti = 'tanh')
 else:
-    net = CascadedUnet(n_channels =2,f_size=32,out_channels=2)
+    net = CascadedUnet(n_channels =2,f_size=32,out_channels=2, out_acti='tanh')
 net.apply(init_weights)
 net.to(device)
 summary(net,[[8,2,320,320]],depth=4, col_names=(['input_size','output_size']),verbose=1)
@@ -148,7 +149,7 @@ step = 0; gloss= torch.Tensor([0]); loss=torch.Tensor([0])
 resnet_list = []; resnet_valid_list = []; psnr_list =[]; ssim_list = []
 reg_score_list=[]; reg_valid_list = []; lr_rate_list = []
 ssim_max = 0.
-w1 = .5; w2 = .5
+w1 = .9; w2 = .1
     
 for epoch in range(1, epochs+1):
     resnet_score = 0.0
@@ -212,11 +213,12 @@ for epoch in range(1, epochs+1):
             gloss = (w1/(w1+w2)) * loss_image + (w2/(w1+w2))*loss_ssim
             resnet_valid += gloss*recon.size(0)
                 
-            gt = full[:,0:1]; pred = (net_out)[:,0:1]
-            psnr_metric += torch_psnr(gt, torch.clip(pred,0.,1.))*recon.size(0)
+            gt = full[:,0:1].cpu().numpy(); pred = (net_out)[:,0:1].cpu().numpy()
             
-            ssim_metric += 100*torch_ssim(data_range=1.)(
-                torch.clip(pred,0.,1.).to('cpu'),gt.to('cpu'))*recon.size(0)
+            psnr_metric += psnr(gt, np.clip(pred,0,1))*recon.size(0)
+            ssim_metric += 100*ssim(gt[:,0],np.clip(pred,0.,1.)[:,0], data_range=1,
+                                    channel_axis=0)*recon.size(0)
+            
             
             bar.set_postfix(ordered_dict={"net_loss":gloss.item(), "reg_loss":loss.item()})
             bar.update(n=1)
@@ -319,11 +321,12 @@ with torch.no_grad():
         # loss_reg = torch.mean(torch.abs(regularizer(PE(coord)(recon+net_out))[0]))
         
             
-        gt = full[:,0:1]; pred = (net_out)[:,0:1]
-        psnr_metric += torch_psnr(gt, torch.clip(pred,0.,1.))*recon.size(0)
+        gt = full[:,0:1].cpu().numpy(); pred = (net_out)[:,0:1].cpu().numpy()
         
-        ssim_metric += 100*torch_ssim(data_range=1.)(
-            torch.clip(pred,0.,1.).to('cpu'),gt.to('cpu'))*recon.size(0)
+        psnr_metric += psnr(gt, np.clip(pred,0,1))*recon.size(0)
+        ssim_metric += 100*ssim(gt[:,0],np.clip(pred,0.,1.)[:,0], data_range=1,
+                                channel_axis=0)*recon.size(0)
+        
         
         bar.set_postfix(ordered_dict={"net_loss":gloss.item(), "reg_loss":loss.item()})
         bar.update(n=1)
@@ -386,13 +389,13 @@ if options.method == 'residualIter':
         # time.sleep(.2)
         
     # np.save('U_%s.npy'%options.task,U)
-    
-#%%
 
-    K=np.linspace(0,len(indices)-1,20).astype(np.uint16)
+
+    K=np.linspace(0,len(indices)-1,400).astype(np.uint16)
     stepsize = np.linspace(0.1,1,5)
     TABLE = pd.DataFrame(columns=['stepsize','psnr','ssim'])
     net.to(device)
+    # net.load_state_dict(torch.load('%s.pt' %(index)))
     net.load_state_dict(torch.load('%s.pt' %(index)))
     net.eval()
     
@@ -405,7 +408,7 @@ if options.method == 'residualIter':
         psnr_list = []; ssim_list = []
         for k in K:
             u = U[k]; y = Y[k]; x0 = inv_fourier(y); gt = X[k]; metric =[]
-            maxiter = 100
+            maxiter = 20
             s = np.repeat(ss, maxiter); 
             img_fidelity=[]; 
             init = torch.Tensor(np.expand_dims(np.stack(
@@ -428,9 +431,9 @@ if options.method == 'residualIter':
                                ])
                 
                
-        I = np.linspace(0,maxiter-1,5).astype(np.uint16)
-        metric=np.array(metric)
-        psnr_list.append(metric[-1,0]); ssim_list.append(metric[-1,1])
+            I = np.linspace(0,maxiter-1,5).astype(np.uint16)
+            metric=np.array(metric)
+            psnr_list.append(metric[-1,0]); ssim_list.append(metric[-1,1])
            
         fig, ax = plt.subplots(1,2,figsize=(9,3))
         pl = ax[0].plot(metric[:,0])
@@ -456,7 +459,7 @@ if options.method == 'residualIter':
         plt.colorbar(im,ax=ax[1,4])
         fig.tight_layout(pad=.3)
         plt.show()
-            
+        
                 
         table = pd.DataFrame(np.array([ss,np.mean(psnr_list),np.mean(ssim_list)]).reshape(1,3),
                              columns=['stepsize','psnr','ssim'])

@@ -50,7 +50,7 @@ def channelize(compl_data):
 #metrics
 
 def psnr(y_true,y_pred):
-    res = 20*np.log10(np.max(y_true))-10*np.log10(np.mean(np.square(y_true-y_pred)))
+    res = 20*np.log10(1)-10*np.log10(np.mean(np.square(y_true-y_pred)))
     return res
 
 def torch_psnr(y_true, y_pred):

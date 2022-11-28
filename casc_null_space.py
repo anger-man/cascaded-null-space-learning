@@ -26,6 +26,7 @@ from torchmetrics import StructuralSimilarityIndexMeasure as torch_ssim
 import optparse
 from models import init_weights, CascNullSpace
 import pytorch_ssim
+from skimage.metrics import structural_similarity as ssim
 import pandas as pd
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -38,9 +39,9 @@ parser.add_option('--lambda', action="store", type= float,dest="lambda",default=
 parser.add_option('--wait', action="store", type=int, dest="wait",default=0)
 parser.add_option('--lr', action='store', type=float, dest='lr', default=2e-4)
 parser.add_option('--method', action='store',type=str,dest='meth', default='nullspaceUnc')
-parser.add_option('--task', action='store', type=str, dest='task', default='phantom')
+parser.add_option('--task', action='store', type=str, dest='task', default='fastmri')
 parser.add_option('--bs', action = 'store', type=float, dest='bs', default = 6)
-parser.add_option('--epochs', action = 'store', type=float, dest='epochs', default = 60)
+parser.add_option('--epochs', action = 'store', type=float, dest='epochs', default = 0)
 
 options,args = parser.parse_args()
 
@@ -142,7 +143,7 @@ resnet_list = []; resnet_valid_list = []; psnr_list =[]; ssim_list = []
 reg_score_list=[]; reg_valid_list = []; lr_rate_list = []
 ssim_max = 0.
 resnet_iter = epochs +1 if train_resnet else 0
-w1 = .5; w2 = .5
+w1 = .9; w2 = .1
     
 for epoch in range(1, resnet_iter):
     resnet_score = 0.0
@@ -261,11 +262,11 @@ for epoch in range(1, resnet_iter):
             gloss = (w1/(w1+w2)) * loss_image + (w2/(w1+w2))*loss_ssim
             resnet_valid += gloss*recon.size(0)
                 
-            gt = full[:,0:1]; pred = (net_out)[:,0:1]
-            psnr_metric += torch_psnr(gt, torch.clip(pred,0.,1.))*recon.size(0)
+            gt = full[:,0:1].cpu().numpy(); pred = (net_out)[:,0:1].cpu().numpy()
             
-            ssim_metric += 100*torch_ssim(data_range=1.)(
-                torch.clip(pred,0.,1.).to('cpu'),gt.to('cpu'))*recon.size(0)
+            psnr_metric += psnr(gt, np.clip(pred,0,1))*recon.size(0)
+            ssim_metric += 100*ssim(gt[:,0],np.clip(pred,0.,1.)[:,0], data_range=1,
+                                    channel_axis=0)*recon.size(0)
             
             bar.set_postfix(ordered_dict={"net_loss":gloss.item(), "reg_loss":loss.item()})
             bar.update(n=1)
@@ -371,15 +372,15 @@ with torch.no_grad():
         inter,net_out,unc = net(recon,U)
         
         loss_image = .5*criterion(full,net_out,unc)+.5*MAE()(full,inter)
-        loss_ssim = 1-pytorch_ssim.SSIM()(full[:,0:1],(net_out)[:,0:1])
+        loss_ssim = 1-pytorch_ssim.SSIM()(full[:,0:1],net_out[:,0:1])
         # loss_reg = torch.mean(torch.abs(regularizer(PE(coord)(recon+net_out))[0]))
         
             
-        gt = full[:,0:1]; pred = (net_out)[:,0:1]
-        psnr_metric += torch_psnr(gt, torch.clip(pred,0.,1.))*recon.size(0)
+        gt = full[:,0:1].cpu().numpy(); pred = (net_out)[:,0:1].cpu().numpy()
         
-        ssim_metric += 100*torch_ssim(data_range=1.)(
-            torch.clip(pred,0.,1.).to('cpu'),gt.to('cpu'))*recon.size(0)
+        psnr_metric += psnr(gt, np.clip(pred,0,1))*recon.size(0)
+        ssim_metric += 100*ssim(gt[:,0],np.clip(pred,0.,1.)[:,0], data_range=1,
+                                channel_axis=0)*recon.size(0)
         
         bar.set_postfix(ordered_dict={"net_loss":gloss.item(), "reg_loss":loss.item()})
         bar.update(n=1)
@@ -419,7 +420,7 @@ for i in range(5):
     ax.imshow(uncs[i],cmap='Reds',vmin=0,vmax=.4)
 plt.show()
 
-print('PSNR: %.3f' %(psnr_metric.item()/len(test_loader.dataset)))
+print('PSNR: %.5f' %(psnr_metric.item()/len(test_loader.dataset)))
 print('SSIMx100: %.3f' %(ssim_metric.item()/len(test_loader.dataset)))
 
 
@@ -443,13 +444,118 @@ print('SSIMx100: %.3f' %(ssim_metric.item()/len(test_loader.dataset)))
 # MADtrain 0.1108
 # MADtrain unfiltered: 0.13524
 
-plt.plot(np.mean(uncs,axis=(1,2)),np.mean(np.abs(gts-preds),axis=(1,2)),'o')
-plt.show()
-x = pd.Series(np.mean(np.abs(gts-preds),axis=(1,2)))
-y = pd.Series(np.mean(uncs,axis=(1,2)))
-df = pd.DataFrame(columns=['x_coord','y_coord'])
-df['y_coord']=x
-df['x_coord']=y
-df.to_csv('xy-coordinates.csv')
+if options.meth == 'nullspaceUnc':
+    plt.plot(np.mean(uncs,axis=(1,2)),np.mean(np.abs(gts-preds),axis=(1,2)),'o')
+    plt.show()
+    x = pd.Series(np.mean(np.abs(gts-preds),axis=(1,2)))
+    y = pd.Series(np.mean(uncs,axis=(1,2)))
+    df = pd.DataFrame(columns=['x_coord','y_coord'])
+    df['y_coord']=x
+    df['x_coord']=y
+    df.to_csv('xy-coordinates.csv')
 
+
+
+#%%
+from functions import inv_fourier, fourier, undersample
+
+    
+indices = np.sort([os.path.join(data_path,'evaluation',f) 
+               for f in os.listdir('%s/evaluation'%options.task)])
+Y = []; X =[]; 
+U = np.load('U_%s.npy'%options.task); count=0
+# U=[]
+for i in indices:
+    # u = undersample(320)
+    # U.append(u.astype(np.uint8))
+    u = U[count]
+    foo = np.load(i)
+    Y.append(foo*u)
+    X.append(inv_fourier(foo))
+    count+=1
+    # time.sleep(.2)
+    
+# np.save('U_%s.npy'%options.task,U)
+
+
+K=np.linspace(0,len(indices)-1,400).astype(np.uint16)
+stepsize = np.linspace(0.1,1,5)
+TABLE = pd.DataFrame(columns=['stepsize','psnr','ssim'])
+net.to(device)
+# net.load_state_dict(torch.load('%s.pt' %(index)))
+net.load_state_dict(torch.load('%s.pt' %(index)))
+net.eval()
+
+seed = 0
+torch.manual_seed(seed)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed_all(seed)
+    
+for ss in stepsize:
+    ss=0
+    psnr_list = []; ssim_list = []
+    for k in K:
+        u = U[k]; y = Y[k]; x0 = inv_fourier(y); gt = X[k]; metric =[]
+        maxiter = 1
+        s = np.repeat(ss, maxiter); 
+        img_fidelity=[]; 
+        init = torch.Tensor(np.expand_dims(np.stack(
+            [x0.real, x0.imag],axis=0),0)).to(device)
+        with torch.no_grad():
+            init =  net(init, torch.Tensor(np.expand_dims(u,0)).to(device))[1]
+        res = np.zeros_like(x0)
+        res.real = init[0,0].cpu(); res.imag = init[0,1].cpu()
+        x = res
+        for i in range(maxiter):
+            
+            #data fidelity
+            dif = inv_fourier((fourier(x)*u-y)*u)
+            xnew = x-s[i]*dif
+            x = xnew
+            img_fidelity.append(xnew.real)
+                              
+            metric.append([psnr(gt.real,np.clip(x.real,0,1)),
+                           100*ssim(gt.real,np.clip(x.real,0,1),data_range=1)
+                           ])
+            
+           
+        I = np.linspace(0,maxiter-1,5).astype(np.uint16)
+        metric=np.array(metric)
+        psnr_list.append(metric[-1,0]); ssim_list.append(metric[-1,1])
+       
+    fig, ax = plt.subplots(1,2,figsize=(9,3))
+    pl = ax[0].plot(metric[:,0])
+    pl = ax[1].plot(metric[:,1],color='orange')
+    plt.suptitle('psnr: %.2f, sim: %.2f'%(
+        metric[-1,0],metric[-1,1])); 
+    plt.show()
+        
+   
+    
+    fig, ax = plt.subplots(2,5,figsize=(14,4)); 
+    for j in range(5):
+        im = ax[0,j].imshow(img_fidelity[I[j]], cmap='Greys_r', vmin=0, vmax=1)
+        ax[0,j].axis('off')
+        plt.colorbar(im,ax=ax[0,j])
+        
+    
+    im = ax[1,3].imshow(np.real(x0), cmap='Greys_r',vmin=0,vmax=1)
+    ax[1,3].axis('off')
+    plt.colorbar(im,ax=ax[1,3])
+    im = ax[1,4].imshow(gt.real, cmap='Greys_r')
+    ax[1,4].axis('off')
+    plt.colorbar(im,ax=ax[1,4])
+    fig.tight_layout(pad=.3)
+    plt.show()
+    
+            
+    table = pd.DataFrame(np.array([ss,np.mean(psnr_list),np.mean(ssim_list)]).reshape(1,3),
+                         columns=['stepsize','psnr','ssim'])
+
+    TABLE=pd.concat([TABLE,table],ignore_index=True)
+    TABLE.to_csv('table_%s.csv'%index)
+    
+    gc.collect()
+
+    
 
