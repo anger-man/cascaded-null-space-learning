@@ -42,11 +42,11 @@ print(device,flush=True)
 parser = optparse.OptionParser()
 parser.add_option('--lambda', action="store", type= float,dest="lambda",default=10)
 parser.add_option('--wait', action="store", type=int, dest="wait",default=0)
-parser.add_option('--lr', action='store', type=float, dest='lr', default=2e-4)
-parser.add_option('--method', action='store',type=str,dest='meth', default='nett')
+parser.add_option('--lr', action='store', type=float, dest='lr', default=1e-4)
+parser.add_option('--method', action='store',type=str,dest='meth', default='nettScaled')
 parser.add_option('--task', action='store', type=str, dest='task', default='phantom')
 parser.add_option('--bs', action = 'store', type=float, dest='bs', default = 6)
-parser.add_option('--epochs', action = 'store', type=float, dest='epochs', default = 60)
+parser.add_option('--epochs', action = 'store', type=float, dest='epochs', default = 0)
 
 options,args = parser.parse_args()
 
@@ -71,7 +71,7 @@ regularizer.to(device)
 print(summary(regularizer,[8,2,320,320]))
 
 optim = torch.optim.Adam(regularizer.parameters(), lr=options.lr)
-scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, factor=0.25, patience=3, cooldown=1)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, factor=0.25, patience=2, cooldown=1)
 
 criterion = MAE()
 
@@ -259,7 +259,7 @@ for i in indices:
     
 #%%
 
-K=np.linspace(0,len(indices)-1,400).astype(np.uint16)
+K=np.linspace(0,len(indices)-1,20).astype(np.uint16)
 LAM = np.linspace(.1,2,10)
 stepsize = np.linspace(0.1,1,5)
 TABLE = pd.DataFrame(columns=['lam','stepsize','psnr','ssim'])
@@ -279,10 +279,10 @@ for ss in stepsize:
         psnr_list = []; ssim_list = []
         for k in K:
             u = U[k]; y = Y[k]; x0 = inv_fourier(y); gt = X[k]; metric =[]
-            maxiter = 300
+            maxiter = 200
             s = np.repeat(ss, maxiter); 
             img_fidelity=[]; img_reg=[]
-            x = x0
+            x = np.zeros_like(x0)
             for i in range(maxiter):
                 
                 #data fidelity

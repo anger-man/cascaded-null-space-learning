@@ -161,7 +161,9 @@ class CascNullSpace(nn.Module):
         self.up11 = upsampling(4*f_size, 2*f_size, normalization)
         self.up1_out = upsampling(2*f_size, f_size, normalization)
         
-        self.up_unc = upsampling(2*f_size, f_size, normalization)
+        self.up_unc2 = upsampling(4*f_size, 2*f_size, normalization)
+        self.up_unc1 = upsampling(2*f_size, f_size, normalization)
+        
         self.out1 = nn.Sequential(
             nn.Conv2d(f_size, out_channels,3,stride=1,padding='same'),   
             nn.ModuleDict([['relu',nn.ReLU()],['tanh',nn.Tanh()],['linear',nn.Identity()]]
@@ -211,8 +213,9 @@ class CascNullSpace(nn.Module):
         img_out1 = self.out1(obranch1)
         final = x + P_ker(img_out1, U)
         
-        obranch2 = self.up_unc(upsa11,skip10)
-        unc_out = self.unc(obranch2)
+        u = self.up_unc2(upsa12,skip11)
+        u = self.up_unc1(u,skip10)
+        unc_out = self.unc(u)
         ###############################
         return([inter,final,unc_out])
     
