@@ -39,9 +39,9 @@ parser.add_option('--lambda', action="store", type= float,dest="lambda",default=
 parser.add_option('--wait', action="store", type=int, dest="wait",default=0)
 parser.add_option('--lr', action='store', type=float, dest='lr', default=1e-4)
 parser.add_option('--method', action='store',type=str,dest='meth', default='nullspaceUnc')
-parser.add_option('--task', action='store', type=str, dest='task', default='phantom')
+parser.add_option('--task', action='store', type=str, dest='task', default='fastmri')
 parser.add_option('--bs', action = 'store', type=float, dest='bs', default = 6)
-parser.add_option('--epochs', action = 'store', type=float, dest='epochs', default = 60)
+parser.add_option('--epochs', action = 'store', type=float, dest='epochs', default = 0)
 
 options,args = parser.parse_args()
 
@@ -75,6 +75,8 @@ scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
     optim_net, factor=0.25, patience=2, cooldown=1,mode='max')
 
 use_unc = True if options.meth=='nullspaceUnc' else False 
+adapt_w = True if options.meth=='nullspaceUnc' else False 
+
 criterion = uncMAE(use_unc = use_unc)
 
 #%%
@@ -143,7 +145,7 @@ resnet_list = []; resnet_valid_list = []; psnr_list =[]; ssim_list = []
 reg_score_list=[]; reg_valid_list = []; lr_rate_list = []
 ssim_max = 0.
 resnet_iter = epochs +1 if train_resnet else 0
-w1 = .5; w2 = .5
+w1 = .9; w2 = .1
     
 for epoch in range(1, resnet_iter):
     resnet_score = 0.0
@@ -203,8 +205,9 @@ for epoch in range(1, resnet_iter):
             # loss_reg = torch.mean(torch.abs(regularizer(PE(coord)(recon+net_out))[0]))
             
             gloss = w1 * loss_image + w2*loss_ssim
-            w1 = .999*w1 + 0.001*(loss_ssim/(loss_ssim+loss_image)).item()
-            w2 = .999*w2 + 0.001*(loss_image/(loss_ssim+loss_image)).item()
+            if adapt_w:
+                w1 = .999*w1 + 0.001*(loss_ssim/(loss_ssim+loss_image)).item()
+                w2 = .999*w2 + 0.001*(loss_image/(loss_ssim+loss_image)).item()
             gloss.backward()
             optim_net.step()
             resnet_score += gloss*recon.size(0)

@@ -149,7 +149,7 @@ step = 0; gloss= torch.Tensor([0]); loss=torch.Tensor([0])
 resnet_list = []; resnet_valid_list = []; psnr_list =[]; ssim_list = []
 reg_score_list=[]; reg_valid_list = []; lr_rate_list = []
 ssim_max = 0.
-w1 = .5; w2 = .5
+w1 = .9; w2 = .1
     
 for epoch in range(1, epochs+1):
     resnet_score = 0.0
@@ -177,8 +177,8 @@ for epoch in range(1, epochs+1):
         loss_ssim = 1-pytorch_ssim.SSIM()(full[:,0:1],(net_out)[:,0:1])
         
         gloss = w1 * loss_image + w2*loss_ssim
-        w1 = .999*w1 + 0.001*(loss_ssim/(loss_ssim+loss_image)).item()
-        w2 = .999*w2 + 0.001*(loss_image/(loss_ssim+loss_image)).item()
+        #w1 = .999*w1 + 0.001*(loss_ssim/(loss_ssim+loss_image)).item()
+        #w2 = .999*w2 + 0.001*(loss_image/(loss_ssim+loss_image)).item()
         gloss.backward()
         optim_net.step()
         resnet_score += gloss*recon.size(0)
