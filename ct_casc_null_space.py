@@ -42,8 +42,8 @@ parser.add_option('--lr', action='store', type=float, dest='lr', default=1e-4)
 parser.add_option('--method', action='store',type=str,dest='meth', default='nullspace')
 parser.add_option('--task', action='store', type=str, dest='task', default='radon')
 parser.add_option('--rec_method', action='store', type=str, dest='rec_method', default = 'pseudoinverse')
-parser.add_option('--bs', action = 'store', type=float, dest='bs', default = 4)
-parser.add_option('--epochs', action = 'store', type=float, dest='epochs', default = 1)
+parser.add_option('--bs', action = 'store', type=float, dest='bs', default = 5)
+parser.add_option('--epochs', action = 'store', type=float, dest='epochs', default = 50)
 
 options,args = parser.parse_args()
 
@@ -72,7 +72,7 @@ i = torch.LongTensor(indices)
 v = torch.FloatTensor(values)
 shape=r.shape
 R = torch.sparse_coo_tensor(i, v, torch.Size(shape), device=device)
-del r
+r_sparse = r; del r
 
 values = rt.data
 indices = np.vstack((rt.row, rt.col))
@@ -80,7 +80,7 @@ i = torch.LongTensor(indices)
 v = torch.FloatTensor(values)
 shape=rt.shape
 RT = torch.sparse_coo_tensor(i, values=v,size= torch.Size(shape), device=device)
-del rt
+rt_sparse = rt; del rt
 
 tmp = np.linspace(-90,90,NP)
 tmp = np.where(np.abs(tmp)>45,0,1)
@@ -96,8 +96,9 @@ def FP(x):
     
 if options.rec_method == 'pseudoinverse':
     def rec_method(x):
-        tmp = torch.fft.fftshift(torch.fft.fft2((x)))*Framp
-        frx = torch.real((torch.fft.ifft2(torch.fft.fftshift(tmp))))
+        d = len(x.size())
+        tmp = torch.fft.fftshift(torch.fft.fft2((x)),dim=(d-2,d-1))*Framp
+        frx = torch.real((torch.fft.ifft2(torch.fft.fftshift(tmp,dim=(d-2,d-1)))))
         rec = []
         for k in range(x.size(0)):
             fbp = torch.matmul(RT,frx[k].reshape([-1,1])).reshape([1,N1,N1])
@@ -244,38 +245,14 @@ for epoch in range(1, resnet_iter):
     save_images = 1
     with torch.no_grad():
         bar = tq(valid_loader, postfix={"net_vali":0.0,"reg_vali":0.0})
-        for U,recon,full,full2 in bar:
-            recon = recon.to(device); full= full.to(device)
-            U = U.to(device)
+        for full in bar:
+            full = full.to(device)
+            ydata = FP(full)*limited_mask
+            recon = rec_method(ydata)
+            recon = recon.to(device);
             
-            # coord=[]
-            # for dummy in range(batch_size):
-            #     pwidth= int(np.random.uniform(.5,.6)*320)
-            #     coord.append(pwidth)
-            #     coord.append(np.random.choice(range(320-pwidth)))
-            #     coord.append(np.random.choice(range(320-pwidth)))
-        
-            # #####################################
-            # inter = recon + net(recon)[0]
-            # pred1,unc1 = regularizer(PE(coord)(inter))
-            # loss1 = criterion(PE(coord)(full-inter),pred1,unc1)
-            # full2  = full2.to(device); 
-            # pred2,unc2 = regularizer(PE(coord)(full2))
-            # loss2 = criterion(torch.zeros_like(pred2),pred2,unc2)
-            # del full2
-            # if options.meth in ['nett','nett_unc']:
-            #     loss = .5*(loss1+loss2)
-            # reg_valid+=loss*full.size(0)
-            #####################################
- 
-            inter,net_out,unc = net(recon,U)
-            
-            # tmp = net_out
-            # tmp = torch.complex(tmp[:,0],tmp[:,1]).to(device)
-            # tmp = torch_fourier(tmp)
-            # tmp = tmp*U
-            # tmp = torch_inv_fourier(tmp)
-            # rec = torch.stack([torch.real(tmp), torch.imag(tmp)],axis=1)
+          
+            inter,net_out,unc = net(recon)
             
             loss_image = .5*criterion(full,net_out,unc)+.5*MAE()(full,inter)
             loss_ssim = 1-pytorch_ssim.SSIM()(full[:,0:1],(net_out)[:,0:1])
@@ -304,7 +281,7 @@ for epoch in range(1, resnet_iter):
             
         
     
-    resnet_list.append(resnet_score.item()/len(train_loader.dataset)*nc)
+    resnet_list.append(resnet_score.item()/len(train_loader.dataset))
     reg_score_list.append(reg_score.item()/len(train_loader.dataset))
     
     resnet_valid_list.append(resnet_valid.item()/len(valid_loader.dataset))
@@ -387,11 +364,13 @@ ssim_metric = 0.0
 
 with torch.no_grad():
     bar = tq(test_loader, postfix={"net_vali":0.0,"reg_vali":0.0})
-    for U,recon,full,full2 in bar:
-        recon = recon.to(device); full= full.to(device)
-        U = U.to(device)
-        del full2
-        inter,net_out,unc = net(recon,U)
+    for full in bar:
+        full = full.to(device)
+        ydata = FP(full)*limited_mask
+        recon = rec_method(ydata)
+        recon = recon.to(device);
+        
+        inter,net_out,unc = net(recon)
         
         loss_image = .5*criterion(full,net_out,unc)+.5*MAE()(full,inter)
         loss_ssim = 1-pytorch_ssim.SSIM()(full[:,0:1],net_out[:,0:1])
@@ -479,22 +458,15 @@ if options.meth == 'nullspaceUnc':
 
 
 #%%
-from functions import inv_fourier, fourier, undersample
 
     
 indices = np.sort([os.path.join(data_path,'evaluation',f) 
                for f in os.listdir('%s/evaluation'%options.task)])
 Y = []; X =[]; 
-U = np.load('U_%s.npy'%options.task); count=0
 # U=[]
 for i in indices:
-    # u = undersample(320)
-    # U.append(u.astype(np.uint8))
-    u = U[count]
     foo = np.load(i)
-    Y.append(foo*u)
-    X.append(inv_fourier(foo))
-    count+=1
+    X.append(foo)
     # time.sleep(.2)
     
 # np.save('U_%s.npy'%options.task,U)
@@ -504,9 +476,9 @@ K=np.linspace(0,len(indices)-1,np.min([len(indices),400])).astype(np.uint16)
 stepsize = np.linspace(0.1,1,5)
 TABLE = pd.DataFrame(columns=['stepsize','psnr','ssim'])
 net.to(device)
-# net.load_state_dict(torch.load('%s.pt' %(index)))
 net.load_state_dict(torch.load('%s.pt' %(index)))
 net.eval()
+lm = limited_mask.cpu().numpy()[0]
 
 seed = 0
 torch.manual_seed(seed)
@@ -516,21 +488,25 @@ if torch.cuda.is_available():
 ss=0
 psnr_list = []; ssim_list = []
 for k in K:
-    u = U[k]; y = Y[k]; x0 = inv_fourier(y); gt = X[k]; metric =[]
-    maxiter = 1
+    gt = X[k]; metric =[]
+    ydata = torch.Tensor(gt).to(device).unsqueeze(0);  
+    ydata = FP(ydata)*limited_mask
+    recon = rec_method(ydata)
+    y = ydata.cpu()[0].numpy()
+    x0 = recon.cpu()[0,0].numpy()
+    
+    maxiter = 10
     s = np.repeat(ss, maxiter); 
     img_fidelity=[]; 
-    init = torch.Tensor(np.expand_dims(np.stack(
-        [x0.real, x0.imag],axis=0),0)).to(device)
+    
     with torch.no_grad():
-        init =  net(init, torch.Tensor(np.expand_dims(u,0)).to(device))[1]
-    res = np.zeros_like(x0)
-    res.real = init[0,0].cpu(); res.imag = init[0,1].cpu()
-    x = res
+        init =  net(recon)[1]
+    x = init[0,0].cpu().numpy()
     for i in range(maxiter):
         
         #data fidelity
-        dif = inv_fourier((fourier(x)*u-y)*u)
+        tmp = (r_sparse.dot(x.reshape([-1,1])).reshape([NP,M])*lm-y)*lm
+        dif = rt_sparse.dot(tmp.reshape([-1,1])).reshape([N1,N1])
         xnew = x-s[i]*dif
         x = xnew
         img_fidelity.append(xnew.real)
@@ -577,20 +553,4 @@ TABLE=pd.concat([TABLE,table],ignore_index=True)
 TABLE.to_csv('table_%s.csv'%index)
 
 gc.collect()
-
-#%%
-
-
-
-#%%
-#import astra
-
-#vol_geom = astra.create_vol_geom(512, 512)
-#proj_geom = astra.create_proj_geom('parallel', 1.0, 512, np.linspace(0,np.pi,180,False))
-#proj_id = astra.create_projector('cuda', proj_geom, vol_geom)
-#A = astra.OpTomo(proj_id)
-#sinogram = A.FP(torch.Tensor(x).to(device))
-
-#sinogram_id, sinogram = astra.create_sino(torch.Tensor(gt[::2,::2]), proj_id)
-#plt.imshow(sinogram)
 

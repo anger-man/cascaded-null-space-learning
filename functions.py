@@ -417,10 +417,12 @@ def plot_images(recon,net_out,full,rec,index,step):
 #%%
 
 def torch_fourier(x):
-    return torch.fft.fftshift(torch.fft.fft2(torch.fft.fftshift(x)))
+    d = len(x.size()) 
+    return torch.fft.fftshift(torch.fft.fft2(x),axis=(d-2,d-1))
 
 def torch_inv_fourier(x):
-    return torch.fft.fftshift(torch.fft.ifft2(torch.fft.fftshift(x)))
+    d = len(x.size()) 
+    return torch.fft.ifft2(torch.fft.fftshift(x,axis=(d-2,d-1)))
 
 #%%
 

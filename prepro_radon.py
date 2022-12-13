@@ -151,6 +151,11 @@ np.save('ramp_filter.np',F)
 plt.imshow(rx); plt.colorbar()
 plt.imshow(radon(x,circle=True,theta=theta,preserve_range=True).T);plt.colorbar()
 
+
+
+# t1=radon(iradon(radon(x,theta,preserve_range=True),theta,filter_name='cosine'),theta,preserve_range=True)
+# t2=radon(x,theta,preserve_range=True)
+#not exact pseudoinverse
 #%%
 
 def create_masks(NumMasks,mode,R):
@@ -269,6 +274,7 @@ fbp2 =np.transpose(R/NP).dot(frx.reshape([M*NP,1])).reshape([N2,N1])
 plt.imshow(fbp2,vmin=0,vmax=2); plt.colorbar()
 
 
+radon(x,theta)
 
 
 

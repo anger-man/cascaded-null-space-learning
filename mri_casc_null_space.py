@@ -20,11 +20,11 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm as tq
 import time
 from functions import uncMAE, MAE
-from functions import DataGenerator, torch_fourier, torch_inv_fourier
+from functions import DataGenerator 
 from functions import torch_psnr, plot_images, PE, psnr
 from torchmetrics import StructuralSimilarityIndexMeasure as torch_ssim
 import optparse
-from models import init_weights, CascNullSpace
+from mri_models import init_weights, CascNullSpace
 import pytorch_ssim
 from skimage.metrics import structural_similarity as ssim
 import pandas as pd
@@ -40,8 +40,8 @@ parser.add_option('--wait', action="store", type=int, dest="wait",default=0)
 parser.add_option('--lr', action='store', type=float, dest='lr', default=1e-4)
 parser.add_option('--method', action='store',type=str,dest='meth', default='nullspaceUnc')
 parser.add_option('--task', action='store', type=str, dest='task', default='fastmri')
-parser.add_option('--bs', action = 'store', type=float, dest='bs', default = 6)
-parser.add_option('--epochs', action = 'store', type=float, dest='epochs', default = 0)
+parser.add_option('--bs', action = 'store', type=float, dest='bs', default = 4)
+parser.add_option('--epochs', action = 'store', type=float, dest='epochs', default = 10)
 
 options,args = parser.parse_args()
 
