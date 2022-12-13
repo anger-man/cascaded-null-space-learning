@@ -4,3 +4,4 @@ tables/*
 arrays/*
 *.pt
 old_scripts/*
+*.npz

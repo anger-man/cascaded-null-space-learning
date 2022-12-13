@@ -20,14 +20,15 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm as tq
 import time
 from functions import uncMAE, MAE
-from functions import DataGenerator, torch_fourier, torch_inv_fourier
+from functions import CtDataGenerator, torch_fourier, torch_inv_fourier
 from functions import torch_psnr, plot_images, PE, psnr
 from torchmetrics import StructuralSimilarityIndexMeasure as torch_ssim
 import optparse
-from rad_models import init_weights, CascNullSpace
+from ct_models import init_weights, CascNullSpace
 import pytorch_ssim
 from skimage.metrics import structural_similarity as ssim
 import pandas as pd
+from scipy.sparse import load_npz
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(device,flush=True)
@@ -38,11 +39,11 @@ parser = optparse.OptionParser()
 parser.add_option('--lambda', action="store", type= float,dest="lambda",default=10)
 parser.add_option('--wait', action="store", type=int, dest="wait",default=0)
 parser.add_option('--lr', action='store', type=float, dest='lr', default=1e-4)
-parser.add_option('--method', action='store',type=str,dest='meth', default='nullspaceUnc')
+parser.add_option('--method', action='store',type=str,dest='meth', default='nullspace')
 parser.add_option('--task', action='store', type=str, dest='task', default='radon')
 parser.add_option('--rec_method', action='store', type=str, dest='rec_method', default = 'pseudoinverse')
-parser.add_option('--bs', action = 'store', type=float, dest='bs', default = 6)
-parser.add_option('--epochs', action = 'store', type=float, dest='epochs', default = 0)
+parser.add_option('--bs', action = 'store', type=float, dest='bs', default = 4)
+parser.add_option('--epochs', action = 'store', type=float, dest='epochs', default = 1)
 
 options,args = parser.parse_args()
 
@@ -60,15 +61,62 @@ train_on_gpu = torch.cuda.is_available()
 index = '%s_%s'%(options.task, options.meth)
 
 #%%
+NP = 90; M = 256; N1= 256
+r = load_npz('fp.npz')
+rt= load_npz('bp.npz')
+Framp = torch.Tensor(np.load('ramp_filter.npy').astype(np.float32)[0]).to(device).unsqueeze(0).unsqueeze(0)
+
+values = r.data
+indices = np.vstack((r.row, r.col))
+i = torch.LongTensor(indices)
+v = torch.FloatTensor(values)
+shape=r.shape
+R = torch.sparse_coo_tensor(i, v, torch.Size(shape), device=device)
+del r
+
+values = rt.data
+indices = np.vstack((rt.row, rt.col))
+i = torch.LongTensor(indices)
+v = torch.FloatTensor(values)
+shape=rt.shape
+RT = torch.sparse_coo_tensor(i, values=v,size= torch.Size(shape), device=device)
+del rt
+
+tmp = np.linspace(-90,90,NP)
+tmp = np.where(np.abs(tmp)>45,0,1)
+limited_mask = torch.Tensor(tmp).unsqueeze(-1).unsqueeze(0).to(device)
+
+def FP(x):
+    y = []
+    for k in range(x.size(0)):
+        rx = torch.matmul(R,x[k].reshape([-1,1])); rx = rx.reshape(NP,M)
+        y.append(rx)
+    return torch.stack(y, axis=0)
+
+    
+if options.rec_method == 'pseudoinverse':
+    def rec_method(x):
+        tmp = torch.fft.fftshift(torch.fft.fft2((x)))*Framp
+        frx = torch.real((torch.fft.ifft2(torch.fft.fftshift(tmp))))
+        rec = []
+        for k in range(x.size(0)):
+            fbp = torch.matmul(RT,frx[k].reshape([-1,1])).reshape([1,N1,N1])
+            rec.append(fbp)
+        return torch.stack(rec, axis=0)
+        
+
+
+#%%
 
 # regularizer = UNet(n_channels =2,f_size=2,out_channels=2, out_acti='tanh')
 # regularizer.apply(init_weights)
 # regularizer.to(device)
 
-net = CascNullSpace(n_channels =2,f_size=32,out_channels=2)
+net = CascNullSpace(n_channels =1,f_size=32,out_channels=1, limited_mask =limited_mask,
+                    FP = FP, rec_method = rec_method)
 net.apply(init_weights)
 net.to(device)
-summary(net,[[8,2,320,320],[8,320,320]],depth=4, col_names=(['input_size','output_size']),verbose=1)
+summary(net,[8,1,256,256],depth=4, col_names=(['input_size','output_size']),verbose=1)
 
 # optim_reg = torch.optim.Adam(regularizer.parameters(), lr=options.lr)
 optim_net = torch.optim.Adam(net.parameters(), lr=options.lr)
@@ -92,19 +140,16 @@ vali_pat = pat[::10]
 vali1 = [f for f in spl1_ids if f[:15] in vali_pat]
 train1 = [f for f in spl1_ids if f not in vali1]
 
-train_dataset = DataGenerator(
+train_dataset = CtDataGenerator(
     path = data_path,
-    task = options.task,
     img_ids1 = train1)
 
-valid_dataset = DataGenerator(
+valid_dataset = CtDataGenerator(
     path = data_path,
-    task = options.task,
     img_ids1 = vali1)
 
-test_dataset = DataGenerator(
+test_dataset = CtDataGenerator(
     path = data_path,
-    task = options.task,
     test = True,
     img_ids1 = test_ids)
 
@@ -162,56 +207,27 @@ for epoch in range(1, resnet_iter):
     
     bar = tq(train_loader, postfix={"net_loss":0.0,"reg_loss":0.0})
    
-    for U,recon,full,full2 in bar:
-        recon = recon.to(device); full= full.to(device)
-        U = U.to(device)
-        
-        # coord=[]
-        # for dummy in range(batch_size):
-        #     pwidth= int(np.random.uniform(.5,.6)*320)
-        #     coord.append(pwidth)
-        #     coord.append(np.random.choice(range(320-pwidth)))
-        #     coord.append(np.random.choice(range(320-pwidth)))
-        
-        # # if (step+1)%2 == 1:
-        # regularizer.train(); net.eval()
-        # optim_reg.zero_grad()
-        # inter = recon + net(recon)[0]
-        # pred1,unc1 = regularizer(PE(coord)(inter))
-        # loss1 = criterion(PE(coord)(full-inter),pred1,unc1)
-        
-        # # real input
-        # full2  = full2.to(device); 
-        # pred2,unc2 = regularizer(PE(coord)(full2))
-        # loss2 = criterion(torch.zeros_like(pred2),pred2,unc2)
-        # del full2
-        
-        # if options.meth in ['nett','nett_unc']:
-        #     loss = .5*(loss1+loss2)
-                  
-        # loss.backward()
-        # optim_reg.step()
-        # reg_score+=loss*full.size(0)
-
-        if (step+1)%nc == 0:
-            net.train(); #regularizer.eval()
-            optim_net.zero_grad()
-            inter,net_out,unc = net(recon,U)
-                
+    for full in bar:
+        full = full.to(device)
+        ydata = FP(full)*limited_mask
+        recon = rec_method(ydata)
+        recon = recon.to(device);
+    
+        net.train(); #regularizer.eval()
+        optim_net.zero_grad()
+        inter,net_out,unc = net(recon)
             
-            # tmp = torch_inv_fourier(tmp)
-            # rec = torch.stack([torch.real(tmp), torch.imag(tmp)],axis=1)
-            loss_image = .5*criterion(full,net_out,unc)+.5*MAE()(full,inter)
-            loss_ssim = 1-pytorch_ssim.SSIM()(full[:,0:1],(net_out)[:,0:1])
-            # loss_reg = torch.mean(torch.abs(regularizer(PE(coord)(recon+net_out))[0]))
-            
-            gloss = w1 * loss_image + w2*loss_ssim
-            if adapt_w:
-                w1 = .999*w1 + 0.001*(loss_ssim/(loss_ssim+loss_image)).item()
-                w2 = .999*w2 + 0.001*(loss_image/(loss_ssim+loss_image)).item()
-            gloss.backward()
-            optim_net.step()
-            resnet_score += gloss*recon.size(0)
+        
+        loss_image = .5*criterion(full,net_out,unc)+.5*MAE()(full,inter)
+        loss_ssim = 1-pytorch_ssim.SSIM()(full[:,0:1],(net_out)[:,0:1])
+        
+        gloss = w1 * loss_image + w2*loss_ssim
+        if adapt_w:
+            w1 = .999*w1 + 0.001*(loss_ssim/(loss_ssim+loss_image)).item()
+            w2 = .999*w2 + 0.001*(loss_image/(loss_ssim+loss_image)).item()
+        gloss.backward()
+        optim_net.step()
+        resnet_score += gloss*recon.size(0)
                 
         bar.set_postfix(ordered_dict={"net_loss":gloss.item(), "reg_loss":loss.item()})
         bar.update(n=1)

@@ -11,9 +11,9 @@ from scipy import ndimage, misc, sparse
 import random
 from scipy.spatial import ConvexHull
 from scipy.interpolate import interp1d
-
+import scipy
 from skimage.transform import radon,iradon
-from scipy.sparse import  lil_matrix
+
 
 #%%
 
@@ -36,7 +36,7 @@ def circ_radius(p0,p1,p2):
     norm_a = np.linalg.norm(a, axis=1)
     norm_b = np.linalg.norm(b, axis=1)
     norm_a_b = np.linalg.norm(a-b, axis=1)
-    cross_a_b = np.cross(a,b)  # 2 * area of triangles
+    cross_a_b = np.cross(a,b)  # 2 * area of triangles(
     return (norm_a*norm_b*norm_a_b) / np.abs(2.0*cross_a_b)
 
 
@@ -110,7 +110,50 @@ def get_points(x, y, N, NumPoints, dist):
     points = np.array(points)
     return points
 
-def create_masks(NumMasks,mode):
+
+#%%
+
+#create
+
+x=np.load('radon/mask_example.npy')[::2,::2]
+N = x.shape[0]**2
+N1 = x.shape[0]; N2=N1
+
+NP=90
+theta=np.linspace(0,180-180/NP,NP)
+
+e1 = np.zeros((x.shape[0],x.shape[1])); e1[0,0] = 1;
+r1 = radon(e1,theta=theta[0:1]);
+M  = np.shape(r1)[0]
+
+# R  = np.zeros((N1*NP,N),dtype=np.float32);
+
+
+# for k in range(NP):
+#     for i in range(N):
+#         ei = np.zeros((N1,N2)); 
+#         i1 = int(i/N1); i2 = i- i1*N1;
+#         ei[i1,i2] = 1;
+#         ri = radon(ei,theta=theta[k:(k+1)]);
+#         R[k*M:(k+1)*M,i:i+1] = ri.astype(np.float32);
+#     print(k)
+    
+# scipy.sparse.save_npz('fp.npz',scipy.sparse.coo_matrix(R))
+
+R = scipy.sparse.load_npz('fp.npz')
+scipy.sparse.save_npz('bp.npz',scipy.sparse.coo_matrix(R.T/NP))
+
+
+rx = R.dot(x.reshape([N1*N2,1])); rx = rx.reshape(NP,M)
+f = np.abs(np.linspace(-1,1,M))
+F = np.stack([f for j in range(NP)], axis=0)
+np.save('ramp_filter.np',F)
+plt.imshow(rx); plt.colorbar()
+plt.imshow(radon(x,circle=True,theta=theta,preserve_range=True).T);plt.colorbar()
+
+#%%
+
+def create_masks(NumMasks,mode,R):
 
     disc = plt.imread('Examples/htc2022_solid_disc_full_recon_fbp_seg.png')
     
@@ -165,17 +208,68 @@ def create_masks(NumMasks,mode):
             plt.imshow(MASK)
         
             name = 'mask_' + str(num)
-            np.save('radon/%s/'%mode+ name, MASK.astype(np.uint8))
             plt.savefig('radon/masks_as_pdf/%s.pdf'%name)
             plt.close()
+            
+            m = MASK.astype(np.uint8)[::2,::2]
+            # m = R.dot(m.reshape([256**2,1])); m = m.reshape(90,256)
+            np.save('radon/%s/'%mode+ name, m)
+            plt.figure()
+            plt.imshow(m)
+            plt.colorbar();plt.show()
+
             print(str(num) + '/' + str(NumMasks))
             num += 1
         
+    return m
+        
 
-NumMasks = 2000
 
-create_masks(1000,mode='train') 
-create_masks(100,mode='evaluation') 
+R = scipy.sparse.load_npz('fp.npz')
+
+m = create_masks(1000,mode='train',R=R) 
+m = create_masks(100,mode='evaluation',R=R) 
+
+
+#%%
+
+N = x.shape[0]**2
+N1 = x.shape[0]; N2=N1
+M=N1
+
+NP=90
+theta=np.linspace(0,180-180/NP,NP)
+# RT  = scipy.sparse.lil_matrix(np.zeros((N,M*NP)))
+RT = np.zeros((N,M*NP),dtype=np.float32)
+rx = radon(x,circle=True,theta=theta,preserve_range=True).T
+
+
+# for k in range(NP):
+#     i=0
+#     for i in range(M):
+#         ei = np.zeros((M,1)); 
+#         i1 = i
+#         ei[i1,0] = 1;
+#         ri = iradon(ei,theta=theta[k:k+1],filter_name = None, interpolation='linear').reshape([N1**2,1])
+#         iii= k*M+i
+#         RT[:,iii:iii+1] = ri/NP
+#     print(k)
+    
+
+# np.savez('fbp0.npz',RT)
+# scipy.sparse.save_npz('fbp.npz',scipy.sparse.csr_matrix(RT))
+    
+    
+tmp = np.fft.fftshift(np.fft.fft2((rx)))*F
+frx = np.real((np.fft.ifft2(np.fft.fftshift(tmp))))
+fbp = iradon(rx.T,theta = theta, filter_name = 'ramp',circle=True,interpolation='linear')
+plt.imshow(fbp,vmin=0,vmax=2); plt.colorbar()
+
+fbp2 =np.transpose(R/NP).dot(frx.reshape([M*NP,1])).reshape([N2,N1])
+plt.imshow(fbp2,vmin=0,vmax=2); plt.colorbar()
+
+
+
 
 
 #%%
@@ -184,61 +278,33 @@ create_masks(100,mode='evaluation')
 
 
 
-x=np.load('radon/train/mask_1000.npy')[::2,::2]
-x = x[::2,::2].real
-N = x.shape[0]**2
-N1 = x.shape[0]; N2=N1
-
-NP=90
-theta=np.linspace(0,180-180/NP,NP)
-
-e1 = np.zeros((x.shape[0],x.shape[1])); e1[0,0] = 1;
-r1 = radon(e1,theta=theta[0:1]);
-M  = np.shape(r1)[0]
-
-R  = lil_matrix(np.zeros((N1*NP,N)));
-
-
-for k in range(NP):
-    for i in range(N):
-        ei = np.zeros((N1,N2)); 
-        i1 = int(i/N1); i2 = i- i1*N1;
-        ei[i1,i2] = 1;
-        ri = radon(ei,theta=theta[k:(k+1)]);
-        R[k*M:(k+1)*M,i:i+1] = ri;
-    print(k)
-    
-    np.savez('fp.npz',R)
-
-rx = R.dot(x.reshape([N1*N2,1])); rx = rx.reshape(NP,M)
-plt.imshow(rx); plt.colorbar()
-plt.imshow(radon(x,circle=True,theta=theta,preserve_range=True).T);plt.colorbar()
+#%%
 
 
 #%%
-RT  = lil_matrix(np.zeros((N,M*NP)));
 
 
-for k in range(NP):
-    i=0
-    for i in range(M):
-        ei = np.zeros((M,1)); 
-        i1 = i
-        ei[i1,0] = 1;
-        ri = iradon(ei,theta=theta[k:k+1],filter_name = 'ramp', interpolation='linear').reshape([676,1])
-        iii= k*M+i
-        RT[:,iii:iii+1] = ri/20;
-    print(k)
-    np.savez('fbp.npz',R)
-    
-    
-    
-fbp = iradon(rx.T,theta = theta, filter_name = 'ramp',circle=True,interpolation='linear')
-plt.imshow(fbp); plt.colorbar()
-
-fbp2 =RT.dot(rx.reshape([M*NP,1])).reshape([N2,N1])
-plt.imshow(fbp2); plt.colorbar()
+import scipy
+import torch
+import numpy as np
 
 
-# fp = torch.Tensor(R.toarray()).to_sparse().to(device)
-# test = torch.matmul(fp,torch.Tensor(x).to(device).reshape(-1))
+x=np.load('radon/train/mask_1000.npy')[::2,::2]
+R = scipy.sparse.load_npz('fp.npz')
+RT = scipy.sparse.load_npz('fbp.npz')
+
+values = R.data
+indices = np.vstack((R.row, R.col))
+i = torch.LongTensor(indices)
+v = torch.FloatTensor(values)
+shape=R.shape
+fp = torch.sparse_coo_tensor(i, v, torch.Size(shape), device='cuda')
+
+values = RT.data
+indices = RT.indices
+i = torch.LongTensor(indices)
+v = torch.FloatTensor(values)
+shape=RT.shape
+fbp = torch.sparse_coo_tensor(i, values=v,size= torch.Size(shape), device='cpu')
+
+t=torch.matmul(fp,torch.Tensor(x.reshape([-1,1])).to('cuda')).reshape([90,256])

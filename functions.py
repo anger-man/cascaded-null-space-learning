@@ -104,6 +104,42 @@ class uncMSE(nn.Module):
             result = torch.square(y_true-y_pred)
             return torch.mean(result)
 
+#%%
+
+class CtDataGenerator(Dataset):
+    
+    
+    def __init__(
+            self,
+            path: str = None,
+            img_ids1: np.array = None,
+            reduce_dim: bool = True,
+            affine_matrix = False,
+            test=False
+        ):
+        #######################################################################
+            self.img_folder1  = f"{path}/train"
+            if test:
+                self.img_folder1  = f"{path}/evaluation"
+            self.img_ids1 = img_ids1
+            self.img_ids2 = np.random.permutation(img_ids1)
+            self.reduce_dim = reduce_dim
+            self.affine_matrix = affine_matrix
+            
+         ######################################################################   
+            
+            
+            
+    def __getitem__(self,idx):
+        
+        #generate the image path
+        image_name = self.img_ids1[idx]
+        image_path = os.path.join(self.img_folder1 , image_name)
+        data = np.load(image_path)
+        return np.expand_dims(data.astype(np.float32),0)
+    
+    def __len__(self):
+        return np.min([len(self.img_ids1),len(self.img_ids1)])
 
 #%%
 
