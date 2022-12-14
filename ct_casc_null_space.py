@@ -39,11 +39,11 @@ parser = optparse.OptionParser()
 parser.add_option('--lambda', action="store", type= float,dest="lambda",default=10)
 parser.add_option('--wait', action="store", type=int, dest="wait",default=0)
 parser.add_option('--lr', action='store', type=float, dest='lr', default=1e-4)
-parser.add_option('--method', action='store',type=str,dest='meth', default='nullspace')
+parser.add_option('--method', action='store',type=str,dest='meth', default='nullspaceUnc')
 parser.add_option('--task', action='store', type=str, dest='task', default='radon')
 parser.add_option('--rec_method', action='store', type=str, dest='rec_method', default = 'pseudoinverse')
-parser.add_option('--bs', action = 'store', type=float, dest='bs', default = 5)
-parser.add_option('--epochs', action = 'store', type=float, dest='epochs', default = 50)
+parser.add_option('--bs', action = 'store', type=float, dest='bs', default = 4)
+parser.add_option('--epochs', action = 'store', type=float, dest='epochs', default = 0)
 
 options,args = parser.parse_args()
 
@@ -58,12 +58,12 @@ torch.cuda.empty_cache()
 gc.collect()
 train_on_gpu = torch.cuda.is_available()
 
-index = '%s_%s'%(options.task, options.meth)
+index = '%s_%s'%(options.rec_method, options.meth)
 
 #%%
 NP = 90; M = 256; N1= 256
-r = load_npz('fp.npz')
-rt= load_npz('bp.npz')
+r = load_npz('fp.npz')#/N1
+rt= load_npz('bp.npz')#*N1
 Framp = torch.Tensor(np.load('ramp_filter.npy').astype(np.float32)[0]).to(device).unsqueeze(0).unsqueeze(0)
 
 values = r.data
@@ -83,7 +83,7 @@ RT = torch.sparse_coo_tensor(i, values=v,size= torch.Size(shape), device=device)
 rt_sparse = rt; del rt
 
 tmp = np.linspace(-90,90,NP)
-tmp = np.where(np.abs(tmp)>45,0,1)
+tmp = np.where(np.abs(tmp)>60,0,1)
 limited_mask = torch.Tensor(tmp).unsqueeze(-1).unsqueeze(0).to(device)
 
 def FP(x):
@@ -95,15 +95,29 @@ def FP(x):
 
     
 if options.rec_method == 'pseudoinverse':
-    def rec_method(x):
-        d = len(x.size())
-        tmp = torch.fft.fftshift(torch.fft.fft2((x)),dim=(d-2,d-1))*Framp
+    def rec_method(y):
+        d = len(y.size())
+        tmp = torch.fft.fftshift(torch.fft.fft2((y)),dim=(d-2,d-1))*Framp
         frx = torch.real((torch.fft.ifft2(torch.fft.fftshift(tmp,dim=(d-2,d-1)))))
         rec = []
-        for k in range(x.size(0)):
+        for k in range(y.size(0)):
             fbp = torch.matmul(RT,frx[k].reshape([-1,1])).reshape([1,N1,N1])
             rec.append(fbp)
         return torch.stack(rec, axis=0)
+    
+if options.rec_method == 'landweber':
+    def rec_method(y):
+        rec = []
+        for k in range(y.size(0)):
+            xk = torch.zeros([1,N1,N1]).to(y.get_device())
+            for ii in range(5):
+                a = torch.matmul(R,xk.reshape([-1,1])).reshape(NP,M)*limited_mask[0]
+                b = (a-y[k])*limited_mask[0]
+                c = torch.matmul(RT,b.reshape([-1,1])).reshape([1,N1,N1])
+                xk = xk - 0.01*c
+            rec.append(xk)
+        return torch.stack(rec, axis=0)
+    
         
 
 
@@ -495,7 +509,7 @@ for k in K:
     y = ydata.cpu()[0].numpy()
     x0 = recon.cpu()[0,0].numpy()
     
-    maxiter = 10
+    maxiter = 1
     s = np.repeat(ss, maxiter); 
     img_fidelity=[]; 
     
@@ -526,8 +540,8 @@ pl = ax[1].plot(metric[:,1],color='orange')
 plt.suptitle('psnr: %.2f, sim: %.2f'%(
     metric[-1,0],metric[-1,1])); 
 plt.show()
-    
-   
+        
+       
 
 fig, ax = plt.subplots(2,5,figsize=(14,4)); 
 for j in range(5):

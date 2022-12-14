@@ -41,7 +41,7 @@ parser.add_option('--lr', action='store', type=float, dest='lr', default=1e-4)
 parser.add_option('--method', action='store',type=str,dest='meth', default='nullspaceUnc')
 parser.add_option('--task', action='store', type=str, dest='task', default='fastmri')
 parser.add_option('--bs', action = 'store', type=float, dest='bs', default = 4)
-parser.add_option('--epochs', action = 'store', type=float, dest='epochs', default = 10)
+parser.add_option('--epochs', action = 'store', type=float, dest='epochs', default =0)
 
 options,args = parser.parse_args()
 

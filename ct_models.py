@@ -219,6 +219,151 @@ class CascNullSpace(nn.Module):
         ###############################
         return([inter,final,unc_out])
     
+
+
+#%%
+
+class Unet(nn.Module):
+    def __init__(self, n_channels, f_size, normalization='none',
+                 out_acti = 'tanh', out_channels=2):
+        super(Unet, self).__init__()
+
+        #unet block 2
+        self.dc10 = double_conv(n_channels, f_size, normalization)
+        self.ds10 = downsampling(f_size, f_size, normalization)
+        self.dc11 = double_conv(f_size, 2*f_size, normalization)
+        self.ds11 = downsampling(2*f_size, 2*f_size, normalization)
+        self.dc12 = double_conv(2*f_size, 4*f_size, normalization)
+        self.ds12 = downsampling(4*f_size, 4*f_size, normalization)
+        self.dc13 = double_conv(4*f_size, 8*f_size, normalization)
+        self.ds13 = downsampling(8*f_size, 8*f_size, normalization)
+        self.dc14 = double_conv(8*f_size, 16*f_size, normalization)
+        
+        self.up13 = upsampling(16*f_size, 8*f_size, normalization)
+        self.up12 = upsampling(8*f_size, 4*f_size, normalization)
+        self.up11 = upsampling(4*f_size, 2*f_size, normalization)
+        self.up1_out = upsampling(2*f_size, f_size, normalization)
+        
+        self.out1 = nn.Sequential(
+            nn.Conv2d(f_size, out_channels,3,stride=1,padding='same'),   
+            nn.ModuleDict([['relu',nn.ReLU()],['tanh',nn.Tanh()],['linear',nn.Identity()]]
+                          )[out_acti])
+        
+        
+    def forward(self, x):
+        x = x.float()
+        
+        skip10 = self.dc10(x)
+        down11 = self.ds10(skip10)
+        skip11 = self.dc11(down11)
+        down12 = self.ds11(skip11)
+        skip12 = self.dc12(down12)
+        down13 = self.ds12(skip12)
+        skip13 = self.dc13(down13)
+        down14 = self.ds13(skip13)
+        skip14 = self.dc14(down14)
+        
+        upsa13 = self.up13(skip14,skip13)
+        upsa12 = self.up12(upsa13,skip12)
+        upsa11 = self.up11(upsa12,skip11)
+        obranch1 = self.up1_out(upsa11,skip10)
+        img_out1 = self.out1(obranch1)
+        final = x + img_out1
+        
+        ###############################
+        return([final,final])
+    
+#%%
+
+
+class CascadedUnet(nn.Module):
+    def __init__(self, n_channels, f_size, normalization='none',
+                 out_acti = 'tanh', out_channels=2):
+        super(CascadedUnet, self).__init__()
+        
+        #unet block 1
+        self.dc00 = double_conv(n_channels, f_size, normalization)
+        self.ds00 = downsampling(f_size, f_size, normalization)
+        self.dc01 = double_conv(f_size, 2*f_size, normalization)
+        self.ds01 = downsampling(2*f_size, 2*f_size, normalization)
+        self.dc02 = double_conv(2*f_size, 4*f_size, normalization)
+        self.ds02 = downsampling(4*f_size, 4*f_size, normalization)
+        self.dc03 = double_conv(4*f_size, 8*f_size, normalization)
+        
+        self.up02 = upsampling(8*f_size, 4*f_size, normalization)
+        self.up01 = upsampling(4*f_size, 2*f_size, normalization)
+        self.up0_out = upsampling(2*f_size, f_size, normalization)
+        self.out0 = nn.Sequential(
+            nn.Conv2d(f_size, out_channels,3,stride=1,padding='same'),   
+            nn.ModuleDict([['relu',nn.ReLU()],['tanh',nn.Tanh()],['linear',nn.Identity()]]
+                          )[out_acti])
+        
+        #unet block 2
+        self.dc10 = double_conv(n_channels+out_channels, f_size, normalization)
+        self.ds10 = downsampling(f_size, f_size, normalization)
+        self.dc11 = double_conv(f_size, 2*f_size, normalization)
+        self.ds11 = downsampling(2*f_size, 2*f_size, normalization)
+        self.dc12 = double_conv(2*f_size, 4*f_size, normalization)
+        self.ds12 = downsampling(4*f_size, 4*f_size, normalization)
+        self.dc13 = double_conv(4*f_size, 8*f_size, normalization)
+        self.ds13 = downsampling(8*f_size, 8*f_size, normalization)
+        self.dc14 = double_conv(8*f_size, 16*f_size, normalization)
+        
+        self.up13 = upsampling(16*f_size, 8*f_size, normalization)
+        self.up12 = upsampling(8*f_size, 4*f_size, normalization)
+        self.up11 = upsampling(4*f_size, 2*f_size, normalization)
+        self.up1_out = upsampling(2*f_size, f_size, normalization)
+        
+        self.out1 = nn.Sequential(
+            nn.Conv2d(f_size, out_channels,3,stride=1,padding='same'),   
+            nn.ModuleDict([['relu',nn.ReLU()],['tanh',nn.Tanh()],['linear',nn.Identity()]]
+                          )[out_acti])
+       
+        
+        
+    def forward(self, x):
+        x = x.float()
+        
+        ###############################
+        skip00 = self.dc00(x)
+        down01 = self.ds00(skip00)
+        skip01 = self.dc01(down01)
+        down02 = self.ds01(skip01)
+        skip02 = self.dc02(down02)
+        down03 = self.ds02(skip02)
+        skip03 = self.dc03(down03)
+        
+        upsa02 = self.up02(skip03,skip02)
+        upsa01 = self.up01(upsa02,skip01)
+        obranch0 = self.up0_out(upsa01,skip00)
+        img_out0 = self.out0(obranch0)
+        
+        ###############################
+        inter = x + img_out0
+        new_x = torch.concat([x,inter], axis=1)
+        ###############################
+        
+        skip10 = self.dc10(new_x)
+        down11 = self.ds10(skip10)
+        skip11 = self.dc11(down11)
+        down12 = self.ds11(skip11)
+        skip12 = self.dc12(down12)
+        down13 = self.ds12(skip12)
+        skip13 = self.dc13(down13)
+        down14 = self.ds13(skip13)
+        skip14 = self.dc14(down14)
+        
+        upsa13 = self.up13(skip14,skip13)
+        upsa12 = self.up12(upsa13,skip12)
+        upsa11 = self.up11(upsa12,skip11)
+        obranch1 = self.up1_out(upsa11,skip10)
+        img_out1 = self.out1(obranch1)
+        final = x + img_out1
+        
+        ###############################
+        return([inter,final])
+    
+    
 #%%
 
 

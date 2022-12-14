@@ -212,7 +212,7 @@ for epoch in range(1, epochs+1):
             loss_ssim = 1-pytorch_ssim.SSIM()(full[:,0:1],(net_out)[:,0:1])
             # loss_reg = torch.mean(torch.abs(regularizer(PE(coord)(recon+net_out))[0]))
             
-            gloss = (w1/(w1+w2)) * loss_image + (w2/(w1+w2))*loss_ssim
+            gloss = w1 * loss_image + w2 * loss_ssim
             resnet_valid += gloss*recon.size(0)
                 
             gt = full[:,0:1].cpu().numpy(); pred = (net_out)[:,0:1].cpu().numpy()
