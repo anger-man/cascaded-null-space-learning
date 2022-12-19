@@ -110,7 +110,7 @@ if options.rec_method == 'landweber':
         rec = []
         for k in range(y.size(0)):
             xk = torch.zeros([1,N1,N1]).to(y.get_device())
-            for ii in range(5):
+            for ii in range(4):
                 a = torch.matmul(R,xk.reshape([-1,1])).reshape(NP,M)*limited_mask[0]
                 b = (a-y[k])*limited_mask[0]
                 c = torch.matmul(RT,b.reshape([-1,1])).reshape([1,N1,N1])
@@ -458,6 +458,11 @@ print('SSIMx100: %.3f' %(ssim_metric.item()/len(test_loader.dataset)))
 # print(dif1)
 # MADtrain 0.1108
 # MADtrain unfiltered: 0.13524
+
+#%%
+
+# investigate uncertainty estimate
+
 
 if options.meth == 'nullspaceUnc':
     plt.plot(np.mean(uncs,axis=(1,2)),np.mean(np.abs(gts-preds),axis=(1,2)),'o')

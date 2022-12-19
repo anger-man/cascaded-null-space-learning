@@ -364,7 +364,7 @@ net.load_state_dict(torch.load('%s.pt'%index))
 net.to(device)
 net.eval(); 
 
-preds = []; gts = []; uncs = []; inps = []
+preds = []; gts = []; uncs = []; inps = []; Us = []
 psnr_metric = 0.0
 ssim_metric = 0.0
 
@@ -390,14 +390,16 @@ with torch.no_grad():
         bar.set_postfix(ordered_dict={"net_loss":gloss.item(), "reg_loss":loss.item()})
         bar.update(n=1)
         
-        inps.append(recon[:,0].cpu())
+        inps.append(recon.cpu())
         preds.append(net_out[:,0].cpu())
         gts.append(full[:,0].cpu())
         uncs.append(unc[:,0].cpu())
+        Us.append(U.cpu())
     preds = np.concatenate(preds,0)
     inps  = np.concatenate(inps,0)
     gts   = np.concatenate(gts,0)
     uncs  = np.concatenate(uncs,0)
+    Us = np.concatenate(Us,0)
         
 
 
@@ -406,7 +408,7 @@ fig = plt.figure(figsize=(5,6.5))
 for i in range(5):
     ax=fig.add_subplot(6, 5, 1 + i)
     plt.axis('off')
-    ax.imshow(inps[i])
+    ax.imshow(inps[i,0])
 for i in range(5):
     ax=fig.add_subplot(6, 5, 5+1 + i)
     plt.axis('off')
@@ -449,6 +451,9 @@ print('SSIMx100: %.3f' %(ssim_metric.item()/len(test_loader.dataset)))
 # MADtrain 0.1108
 # MADtrain unfiltered: 0.13524
 
+#%%
+
+# investigate uncertainty estimate
 if options.meth == 'nullspaceUnc':
     plt.plot(np.mean(uncs,axis=(1,2)),np.mean(np.abs(gts-preds),axis=(1,2)),'o')
     plt.show()
@@ -460,6 +465,56 @@ if options.meth == 'nullspaceUnc':
     df.to_csv('xy-coordinates.csv')
 
 
+# insert alpha shapes
+
+import scipy
+
+cor_inps =[]; cor_uncs = []; cor_preds =  []
+array_paths = os.listdir('arrays')
+for k in range(10):
+    file = inps[k]
+    U = Us[k]
+    randn = np.random.randint(0,len(array_paths))
+    shape = np.load(os.path.join('arrays',array_paths[randn]))
+    shape = np.max(shape, axis=0)
+    shape = scipy.ndimage.zoom(shape,(320/256,320/256),order=0)
+    file = np.where(shape==1,file*.5,file)
+    
+    data = torch.Tensor(file).to(device)
+    U = torch.Tensor(U).to(device)
+    with torch.no_grad():
+        inter,net_out,unc = net(data.unsqueeze(0), U.unsqueeze(0))
+    
+    cor_inps.append(data[0:1].cpu())
+    cor_preds.append(net_out[:,0].cpu())
+    cor_uncs.append(unc[:,0].cpu())
+    
+cor_inps = np.concatenate(cor_inps, 0)
+cor_preds = np.concatenate(cor_preds, 0)
+cor_uncs = np.concatenate(cor_uncs, 0)
+
+fig = plt.figure(figsize=(5,6.5))
+for i in range(5):
+    ax=fig.add_subplot(6, 5, 1 + i)
+    plt.axis('off')
+    ax.imshow(cor_inps[i])
+for i in range(5):
+    ax=fig.add_subplot(6, 5, 5+1 + i)
+    plt.axis('off')
+    ax.imshow(cor_preds[i],cmap='Greys_r')
+for i in range(5):
+    ax=fig.add_subplot(6, 5, 2*5+1 + i)
+    plt.axis('off')
+    ax.imshow(gts[i],cmap='Greys_r')
+for i in range(5):
+    ax=fig.add_subplot(6, 5, 3*5+1 + i)
+    plt.axis('off')
+    ax.imshow(np.abs(gts[i]-cor_preds[i]),cmap='Reds')
+for i in range(5):
+    ax=fig.add_subplot(6, 5, 4*5+1 + i)
+    plt.axis('off')
+    ax.imshow(cor_uncs[i],cmap='Reds',vmin=0,vmax=.4)
+plt.show()
 
 #%%
 from functions import inv_fourier, fourier, undersample
