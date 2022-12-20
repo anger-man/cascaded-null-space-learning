@@ -24,7 +24,7 @@ from functions import DataGenerator, torch_fourier, torch_inv_fourier
 from functions import torch_psnr, plot_images, PE, psnr
 from torchmetrics import StructuralSimilarityIndexMeasure as torch_ssim
 import optparse
-from models import Unet, init_weights, CascadedUnet
+from mri_models import Unet, init_weights, CascadedUnet
 import pytorch_ssim
 from skimage.metrics import structural_similarity as ssim
 import pandas as pd
@@ -40,9 +40,9 @@ parser.add_option('--lambda', action="store", type= float,dest="lambda",default=
 parser.add_option('--wait', action="store", type=int, dest="wait",default=0)
 parser.add_option('--lr', action='store', type=float, dest='lr', default=1e-4)
 parser.add_option('--bs', action = 'store', type=float, dest='bs', default = 6)
+parser.add_option('--method', action='store', type=str, dest='method', default = 'residualIter')
+parser.add_option('--architecture', action='store', type=str, dest='arch', default = 'casnet')
 parser.add_option('--epochs', action = 'store', type=float, dest='epochs', default =0)
-parser.add_option('--method', action='store', type=str, dest='method', default = 'residual')
-parser.add_option('--architecture', action='store', type=str, dest='arch', default = 'unet')
 
 
 # parser.add_option('--method', action='store',type=str,dest='meth', default='nett_unc')
@@ -393,7 +393,7 @@ for i in indices:
 
 
 K=np.linspace(0,len(indices)-1,np.min([len(indices),400])).astype(np.uint16)
-stepsize = np.linspace(0.1,1,5)
+stepsize = np.linspace(0.05,0.5,5)
 TABLE = pd.DataFrame(columns=['stepsize','psnr','ssim'])
 net.to(device)
 # net.load_state_dict(torch.load('%s.pt' %(index)))
@@ -410,7 +410,7 @@ for ss in stepsize:
     psnr_list = []; ssim_list = []
     for k in K:
         u = U[k]; y = Y[k]; x0 = inv_fourier(y); gt = X[k]; metric =[]
-        maxiter = 20
+        maxiter = 10
         s = np.repeat(ss, maxiter); 
         img_fidelity=[]; 
         init = torch.Tensor(np.expand_dims(np.stack(

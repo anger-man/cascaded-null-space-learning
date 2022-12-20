@@ -43,9 +43,9 @@ parser.add_option('--lr', action='store', type=float, dest='lr', default=1e-4)
 parser.add_option('--method', action='store',type=str,dest='meth', default='residualIter')
 parser.add_option('--task', action='store', type=str, dest='task', default='radon')
 parser.add_option('--rec_method', action='store', type=str, dest='rec_method', default = 'pseudoinverse')
-parser.add_option('--architecture', action='store', type=str, dest='arch', default = 'unet')
+parser.add_option('--architecture', action='store', type=str, dest='arch', default = 'casnet')
 parser.add_option('--bs', action = 'store', type=float, dest='bs', default = 4)
-parser.add_option('--epochs', action = 'store', type=float, dest='epochs', default = 8)
+parser.add_option('--epochs', action = 'store', type=float, dest='epochs', default = 0)
 
 options,args = parser.parse_args()
 
@@ -476,7 +476,7 @@ for ss in stepsize:
         y = ydata.cpu()[0].numpy()
         x0 = recon.cpu()[0,0].numpy()
         
-        maxiter = 20
+        maxiter = 10
         s = np.repeat(ss, maxiter); 
         img_fidelity=[]; 
         
