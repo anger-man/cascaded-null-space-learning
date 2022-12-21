@@ -37,10 +37,10 @@ print(device,flush=True)
 parser = optparse.OptionParser()
 parser.add_option('--lambda', action="store", type= float,dest="lambda",default=10)
 parser.add_option('--wait', action="store", type=int, dest="wait",default=0)
-parser.add_option('--lr', action='store', type=float, dest='lr', default=1e-4)
-parser.add_option('--method', action='store',type=str,dest='meth', default='nullspaceUnc')
-parser.add_option('--task', action='store', type=str, dest='task', default='phantom')
-parser.add_option('--bs', action = 'store', type=float, dest='bs', default = 4)
+parser.add_option('--lr', action='store', type=float, dest='lr', default=5e-5)
+parser.add_option('--method', action='store',type=str,dest='meth', default='nullspace')
+parser.add_option('--task', action='store', type=str, dest='task', default='fastmri')
+parser.add_option('--bs', action = 'store', type=float, dest='bs', default = 6)
 parser.add_option('--epochs', action = 'store', type=float, dest='epochs', default =0)
 
 options,args = parser.parse_args()
@@ -200,7 +200,7 @@ for epoch in range(1, resnet_iter):
             
             # tmp = torch_inv_fourier(tmp)
             # rec = torch.stack([torch.real(tmp), torch.imag(tmp)],axis=1)
-            loss_image = .5*criterion(full,net_out,unc)+.5*MAE()(full,inter)
+            loss_image = .8*criterion(full,net_out,unc)+.2*MAE()(full,inter)
             loss_ssim = 1-pytorch_ssim.SSIM()(full[:,0:1],(net_out)[:,0:1])
             # loss_reg = torch.mean(torch.abs(regularizer(PE(coord)(recon+net_out))[0]))
             
@@ -260,7 +260,7 @@ for epoch in range(1, resnet_iter):
             # tmp = torch_inv_fourier(tmp)
             # rec = torch.stack([torch.real(tmp), torch.imag(tmp)],axis=1)
             
-            loss_image = .5*criterion(full,net_out,unc)+.5*MAE()(full,inter)
+            loss_image = .8*criterion(full,net_out,unc)+.2*MAE()(full,inter)
             loss_ssim = 1-pytorch_ssim.SSIM()(full[:,0:1],(net_out)[:,0:1])
             # loss_reg = torch.mean(torch.abs(regularizer(PE(coord)(recon+net_out))[0]))
             
@@ -376,7 +376,7 @@ with torch.no_grad():
         del full2
         inter,net_out,unc = net(recon,U)
         
-        loss_image = .5*criterion(full,net_out,unc)+.5*MAE()(full,inter)
+        loss_image = .8*criterion(full,net_out,unc)+.2*MAE()(full,inter)
         loss_ssim = 1-pytorch_ssim.SSIM()(full[:,0:1],net_out[:,0:1])
         # loss_reg = torch.mean(torch.abs(regularizer(PE(coord)(recon+net_out))[0]))
         
@@ -472,13 +472,17 @@ import scipy
 cor_inps =[]; cor_uncs = []; cor_preds =  []
 array_paths = os.listdir('arrays')
 for k in range(10):
-    file = inps[k]
+    file =inps[k]
     U = Us[k]
     randn = np.random.randint(0,len(array_paths))
     shape = np.load(os.path.join('arrays',array_paths[randn]))
     shape = np.max(shape, axis=0)
     shape = scipy.ndimage.zoom(shape,(320/256,320/256),order=0)
-    file = np.where(shape==1,file*.5,file)
+    file = np.where(shape==1,file+.2*np.random.normal(size=file.shape),file)
+    # file =np.fft.fftshift(np.fft.fft2(file))*U
+    # file =np.fft.ifft2(np.fft.fftshift(file))
+    # file = np.stack([np.real(file),np.imag(file)], axis=0)
+
     
     data = torch.Tensor(file).to(device)
     U = torch.Tensor(U).to(device)
@@ -501,7 +505,7 @@ for i in range(5):
 for i in range(5):
     ax=fig.add_subplot(6, 5, 5+1 + i)
     plt.axis('off')
-    ax.imshow(cor_preds[i],cmap='Greys_r')
+    ax.imshow(cor_preds[i],cmap='Greys_r',vmin=0,vmax=1)
 for i in range(5):
     ax=fig.add_subplot(6, 5, 2*5+1 + i)
     plt.axis('off')
@@ -513,7 +517,7 @@ for i in range(5):
 for i in range(5):
     ax=fig.add_subplot(6, 5, 4*5+1 + i)
     plt.axis('off')
-    ax.imshow(cor_uncs[i],cmap='Reds',vmin=0,vmax=.4)
+    ax.imshow(cor_uncs[i],cmap='Reds',vmin=0,vmax=.5)
 plt.show()
 
 #%%

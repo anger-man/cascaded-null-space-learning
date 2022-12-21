@@ -79,7 +79,7 @@ class uncMAE(nn.Module):
         if self.use_unc:
             unc = torch.clip(unc,self.eps,1e7)
             tmp = torch.abs(y_true-y_pred)/unc
-            tmp = torch.where(tmp<=2,tmp,2+torch.log(torch.clip(tmp-2+1,self.eps,1e7)))
+            #tmp = torch.where(tmp<=2,tmp,2+torch.log(torch.clip(tmp-2+1,self.eps,1e7)))
             return torch.mean(tmp + torch.log(1.+2*unc))
             print('yeah')
         else:
@@ -97,7 +97,7 @@ class uncMSE(nn.Module):
         if self.use_unc:
             unc = torch.clip(unc,self.eps,1e7)
             tmp = torch.square(y_true-y_pred)/(2*torch.square(unc))
-            # tmp = torch.where(tmp<=2,tmp,2+torch.log(torch.clip(tmp-2+1,self.eps,1e7)))
+            tmp = torch.where(tmp<=2,tmp,2+torch.log(torch.clip(tmp-2+1,self.eps,1e7)))
             return torch.mean(tmp + .5*torch.log(1.+2*unc*np.pi))
             print('yeah')
         else:
@@ -168,7 +168,8 @@ class DataGenerator(Dataset):
             self.affine_matrix = affine_matrix
             self.datatype = datatype
             self.task = task
-            
+            self.array_paths = os.listdir('arrays')
+
          ######################################################################   
             
             
@@ -180,9 +181,19 @@ class DataGenerator(Dataset):
         image_path = os.path.join(self.img_folder1 , image_name)
         U = undersample(320)
         foo = np.load(image_path)
+        x = inv_fourier(foo)
+        # if np.random.uniform()<0.2:
+        #     foo = inv_fourier(foo).real
+        #     randn = np.random.randint(0,len(self.array_paths))
+        #     shape = np.load(os.path.join('arrays',self.array_paths[randn]))
+        #     shape = np.max(shape, axis=0)
+        #     shape = scipy.ndimage.zoom(shape,(320/256,320/256),order=0)
+        #     foo = np.where(shape==1,.2*foo,foo)
+        #     foo = fourier(foo)
+            
         y_u = foo*U
         rec = inv_fourier(y_u)
-        x = inv_fourier(foo)
+        
         recon = channelize(rec)
         # data = channelize(y_u)
         data=y_u

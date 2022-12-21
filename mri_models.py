@@ -161,6 +161,7 @@ class CascNullSpace(nn.Module):
         self.up11 = upsampling(4*f_size, 2*f_size, normalization)
         self.up1_out = upsampling(2*f_size, f_size, normalization)
         
+        # self.up_unc3 = upsampling(8*f_size, 4*f_size, normalization)
         self.up_unc2 = upsampling(4*f_size, 2*f_size, normalization)
         self.up_unc1 = upsampling(2*f_size, f_size, normalization)
         
@@ -213,6 +214,7 @@ class CascNullSpace(nn.Module):
         img_out1 = self.out1(obranch1)
         final = x + P_ker(img_out1, U)
         
+        # u = self.up_unc3(upsa13,skip12)
         u = self.up_unc2(upsa12,skip11)
         u = self.up_unc1(u,skip10)
         unc_out = self.unc(u)
