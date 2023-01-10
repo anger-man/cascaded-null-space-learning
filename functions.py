@@ -79,7 +79,7 @@ class uncMAE(nn.Module):
         if self.use_unc:
             unc = torch.clip(unc,self.eps,1e7)
             tmp = torch.abs(y_true-y_pred)/unc
-            #tmp = torch.where(tmp<=2,tmp,2+torch.log(torch.clip(tmp-2+1,self.eps,1e7)))
+            tmp = torch.where(tmp<=2,tmp,2+torch.log(torch.clip(tmp-2+1,self.eps,1e7)))
             return torch.mean(tmp + torch.log(1.+2*unc))
             print('yeah')
         else:

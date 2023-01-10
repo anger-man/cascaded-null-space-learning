@@ -41,7 +41,7 @@ parser.add_option('--wait', action="store", type=int, dest="wait",default=0)
 parser.add_option('--lr', action='store', type=float, dest='lr', default=1e-4)
 parser.add_option('--method', action='store',type=str,dest='meth', default='nullspaceUnc')
 parser.add_option('--task', action='store', type=str, dest='task', default='radon')
-parser.add_option('--rec_method', action='store', type=str, dest='rec_method', default = 'landweber')
+parser.add_option('--rec_method', action='store', type=str, dest='rec_method', default = 'pseudoinverse')
 parser.add_option('--bs', action = 'store', type=float, dest='bs', default = 4)
 parser.add_option('--epochs', action = 'store', type=float, dest='epochs', default = 0)
 
@@ -233,7 +233,7 @@ for epoch in range(1, resnet_iter):
         inter,net_out,unc = net(recon)
             
         
-        loss_image = .5*criterion(full,net_out,unc)+.5*MAE()(full,inter)
+        loss_image = .8*criterion(full,net_out,unc)+.2*MAE()(full,inter)
         loss_ssim = 1-pytorch_ssim.SSIM()(full[:,0:1],(net_out)[:,0:1])
         
         gloss = w1 * loss_image + w2*loss_ssim
@@ -268,7 +268,7 @@ for epoch in range(1, resnet_iter):
           
             inter,net_out,unc = net(recon)
             
-            loss_image = .5*criterion(full,net_out,unc)+.5*MAE()(full,inter)
+            loss_image = .8*criterion(full,net_out,unc)+.2*MAE()(full,inter)
             loss_ssim = 1-pytorch_ssim.SSIM()(full[:,0:1],(net_out)[:,0:1])
             # loss_reg = torch.mean(torch.abs(regularizer(PE(coord)(recon+net_out))[0]))
             
@@ -386,7 +386,7 @@ with torch.no_grad():
         
         inter,net_out,unc = net(recon)
         
-        loss_image = .5*criterion(full,net_out,unc)+.5*MAE()(full,inter)
+        loss_image = .8*criterion(full,net_out,unc)+.2*MAE()(full,inter)
         loss_ssim = 1-pytorch_ssim.SSIM()(full[:,0:1],net_out[:,0:1])
         # loss_reg = torch.mean(torch.abs(regularizer(PE(coord)(recon+net_out))[0]))
         

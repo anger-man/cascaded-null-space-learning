@@ -139,9 +139,7 @@ M  = np.shape(r1)[0]
 #     print(k)
     
 # scipy.sparse.save_npz('fp.npz',scipy.sparse.coo_matrix(R))
-
 R = scipy.sparse.load_npz('fp.npz')
-# scipy.sparse.save_npz('fp.npz',R)
 # scipy.sparse.save_npz('bp.npz',scipy.sparse.coo_matrix(R.T))
 
 
@@ -153,11 +151,25 @@ plt.imshow(rx); plt.colorbar()
 plt.imshow(radon(x,circle=True,theta=theta,preserve_range=True).T);plt.colorbar()
 
 
-
 # t1=radon(iradon(radon(x,theta,preserve_range=True),theta,filter_name='cosine'),theta,preserve_range=True)
 # t2=radon(x,theta,preserve_range=True)
 #not exact pseudoinverse
 
+rx = R.dot(x.reshape([N1*N2,1])); rx = rx.reshape(NP,M)
+tmp = np.fft.fftshift(np.fft.fft2((rx)))*F
+frx = np.real((np.fft.ifft2(np.fft.fftshift(tmp))))
+fbp = iradon(rx.T,theta = theta, filter_name = 'ramp',circle=True,interpolation='linear')
+plt.imshow(fbp); plt.colorbar()
+
+fbp2 =np.transpose(R).dot(frx.reshape([M*NP,1])).reshape([N2,N1])
+plt.imshow(fbp2); plt.colorbar()
+
+
+radon(x,theta)
+
+#%%
+
+# pseudoinverse via iradon
 
 # N = x.shape[0]**2
 # N1 = x.shape[0]; N2=N1
@@ -184,19 +196,10 @@ plt.imshow(radon(x,circle=True,theta=theta,preserve_range=True).T);plt.colorbar(
 
 # np.savez('fbp0.npz',RT)
 # scipy.sparse.save_npz('fbp.npz',scipy.sparse.csr_matrix(RT))
-    
-
-rx = R.dot(x.reshape([N1*N2,1])); rx = rx.reshape(NP,M)
-tmp = np.fft.fftshift(np.fft.fft2((rx)))*F
-frx = np.real((np.fft.ifft2(np.fft.fftshift(tmp))))
-fbp = iradon(rx.T,theta = theta, filter_name = 'ramp',circle=True,interpolation='linear')
-plt.imshow(fbp); plt.colorbar()
-
-fbp2 =np.transpose(R).dot(frx.reshape([M*NP,1])).reshape([N2,N1])
-plt.imshow(fbp2); plt.colorbar()
 
 
-radon(x,theta)
+
+
 
 #%%
 
@@ -283,33 +286,32 @@ m = create_masks(100,mode='evaluation',R=R)
 
 
 
-#%%
-
 
 #%%
 
+# make sparse coo tensors
 
-import scipy
-import torch
-import numpy as np
+# import scipy
+# import torch
+# import numpy as np
 
 
-x=np.load('radon/train/mask_1000.npy')[::2,::2]
-R = scipy.sparse.load_npz('fp.npz')
-RT = scipy.sparse.load_npz('fbp.npz')
+# x=np.load('radon/train/mask_1000.npy')[::2,::2]
+# R = scipy.sparse.load_npz('fp.npz')
+# RT = scipy.sparse.load_npz('fbp.npz')
 
-values = R.data
-indices = np.vstack((R.row, R.col))
-i = torch.LongTensor(indices)
-v = torch.FloatTensor(values)
-shape=R.shape
-fp = torch.sparse_coo_tensor(i, v, torch.Size(shape), device='cuda')
+# values = R.data
+# indices = np.vstack((R.row, R.col))
+# i = torch.LongTensor(indices)
+# v = torch.FloatTensor(values)
+# shape=R.shape
+# fp = torch.sparse_coo_tensor(i, v, torch.Size(shape), device='cuda')
 
-values = RT.data
-indices = RT.indices
-i = torch.LongTensor(indices)
-v = torch.FloatTensor(values)
-shape=RT.shape
-fbp = torch.sparse_coo_tensor(i, values=v,size= torch.Size(shape), device='cpu')
+# values = RT.data
+# indices = RT.indices
+# i = torch.LongTensor(indices)
+# v = torch.FloatTensor(values)
+# shape=RT.shape
+# fbp = torch.sparse_coo_tensor(i, values=v,size= torch.Size(shape), device='cpu')
 
-t=torch.matmul(fp,torch.Tensor(x.reshape([-1,1])).to('cuda')).reshape([90,256])
+# t=torch.matmul(fp,torch.Tensor(x.reshape([-1,1])).to('cuda')).reshape([90,256])
